@@ -106,6 +106,17 @@ If you want governed ticket-to-PR automation, start with **AI Workflow**.
 
 If you want the shared foundation behind Atlas tools, watch for **AI Harness**.
 
+## Claude Code Marketplace
+
+Atlas is also the Blazity Claude Code plugin marketplace:
+
+```text
+/plugin marketplace add Blazity/atlas
+/plugin install nextjs-migration-plugin@blazity
+```
+
+More Blazity plugins will be listed here over time. Each plugin repository remains authoritative for issues, releases, license, and contribution.
+
 ## Repository Model
 
 Each Atlas tool has its own repository, roadmap, issue tracker, releases, and contribution path.

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "blazity",
+  "description": "Blazity Atlas plugins for governed AI engineering workflows.",
+  "owner": {
+    "name": "Blazity",
+    "url": "https://github.com/Blazity"
+  },
+  "plugins": [
+    {
+      "name": "nextjs-migration-plugin",
+      "description": "Guided component-first migrations from public websites to production-ready Next.js App Router projects.",
+      "author": {
+        "name": "Blazity"
+      },
+      "category": "development",
+      "source": {
+        "source": "github",
+        "repo": "Blazity/nextjs-migration-plugin",
+        "ref": "main"
+      },
+      "homepage": "https://github.com/Blazity/nextjs-migration-plugin"
+    }
+  ]
+}

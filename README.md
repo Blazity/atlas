@@ -2,19 +2,56 @@
 
 **AI Engineering Toolkit for Governed Systems**
 
+<p>
+  <a href="https://blazity.com/atlas"><img alt="Atlas" src="https://img.shields.io/badge/Atlas-Governed_AI_Engineering-FD6027?style=for-the-badge"></a>
+  <img alt="Self hosted" src="https://img.shields.io/badge/self--hosted-ready-181B20?style=for-the-badge">
+  <img alt="Open source" src="https://img.shields.io/badge/open_source-toolkit-BBED80?style=for-the-badge&labelColor=181B20">
+</p>
+
 Move from plan to production fast. Atlas puts governed AI engineering tools inside your development lifecycle: open source, self-hosted, and built to run on any defensible substrate.
 
 Atlas is not a monorepo. This repository is the **Atlas catalog**: the place to see what tools are part of the toolkit, what they do, and where to start.
 
 > Agents can move fast. Your team still owns the system.
 
-## Tools
+## Toolkit
 
-| Tool | Pillar | Status | What it does |
-| --- | --- | --- | --- |
-| [Atlas Migrator](https://github.com/Blazity/nextjs-migration-plugin) | Platform | Beta | Migrates existing websites into structured Next.js projects with guided discovery, component planning, build gates, and visual verification. |
-| [AI Workflow](https://github.com/Blazity/ai-workflow) | Workflow | Beta | Moves software work from issue to plan, implementation, review, and pull request through governed agent workflows. |
-| AI Harness | Foundation | Coming soon | Shared rules, memory, gates, evals, and runtime conventions for Atlas tools and custom agent workflows. |
+### Next.js Migration Plugin
+
+<p>
+  <img alt="Pillar: Platform" src="https://img.shields.io/badge/pillar-platform-FD6027?style=flat-square">
+  <img alt="Status: private beta" src="https://img.shields.io/badge/status-private_beta-BBED80?style=flat-square&labelColor=181B20">
+  <img alt="Repo: private" src="https://img.shields.io/badge/repo-private-181B20?style=flat-square">
+</p>
+
+Migrate existing websites into structured Next.js projects with guided discovery, component planning, build gates, and visual verification.
+
+[Repository](https://github.com/Blazity/nextjs-migration-plugin)
+
+---
+
+### AI Workflow
+
+<p>
+  <img alt="Pillar: Workflow" src="https://img.shields.io/badge/pillar-workflow-FD6027?style=flat-square">
+  <img alt="Status: beta" src="https://img.shields.io/badge/status-beta-BBED80?style=flat-square&labelColor=181B20">
+  <img alt="GitHub stars" src="https://img.shields.io/github/stars/Blazity/ai-workflow?style=flat-square">
+</p>
+
+Move software work from issue to plan, implementation, review, and pull request through governed agent workflows.
+
+[Repository](https://github.com/Blazity/ai-workflow)
+
+---
+
+### AI Harness
+
+<p>
+  <img alt="Pillar: Foundation" src="https://img.shields.io/badge/pillar-foundation-FD6027?style=flat-square">
+  <img alt="Status: coming soon" src="https://img.shields.io/badge/status-coming_soon-9CA3AF?style=flat-square">
+</p>
+
+Shared rules, memory, gates, evals, and runtime conventions for Atlas tools and custom agent workflows.
 
 ## Why Atlas Exists
 
@@ -34,7 +71,7 @@ The application your customers use.
 
 Atlas Platform tools help modernize, migrate, and operate production web systems. They focus on architecture, components, routing, content, performance, observability, and deployment paths that remain understandable after the AI work is done.
 
-Start with [Atlas Migrator](https://github.com/Blazity/nextjs-migration-plugin).
+Start with [Next.js Migration Plugin](https://github.com/Blazity/nextjs-migration-plugin).
 
 ### Agents
 
@@ -63,7 +100,7 @@ Start with [AI Workflow](https://github.com/Blazity/ai-workflow).
 
 ## Start Here
 
-If you want to migrate a site to Next.js, start with **Atlas Migrator**.
+If you want to migrate a site to Next.js, start with **Next.js Migration Plugin**.
 
 If you want governed ticket-to-PR automation, start with **AI Workflow**.
 
@@ -83,8 +120,10 @@ Use this repository for:
 
 Open implementation issues in the specific tool repository whenever possible.
 
-## Links
+## Explore
 
-- Atlas: https://blazity.com/atlas
-- Blazity: https://blazity.com
-- GitHub: https://github.com/Blazity
+<p>
+  <a href="https://blazity.com/atlas"><img alt="Atlas website" src="https://img.shields.io/badge/Atlas-website-FD6027?style=for-the-badge"></a>
+  <a href="https://blazity.com"><img alt="Blazity" src="https://img.shields.io/badge/Blazity-home-181B20?style=for-the-badge"></a>
+  <a href="https://github.com/Blazity"><img alt="Blazity GitHub" src="https://img.shields.io/badge/GitHub-Blazity-181717?style=for-the-badge&logo=github"></a>
+</p>

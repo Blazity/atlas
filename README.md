@@ -1,3 +1,12 @@
+<p align="center">
+  <a href="https://blazity.com/atlas">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/atlas-logo-dark.svg">
+      <img alt="Atlas" src="assets/atlas-logo-light.svg" width="202">
+    </picture>
+  </a>
+</p>
+
 # Blazity Atlas
 
 **AI Engineering Toolkit for Governed Systems**

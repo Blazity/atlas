@@ -1,12 +1,21 @@
-# Blazity Atlas
+<p align="center">
+  <a href="https://blazity.com/atlas">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/atlas-logo-dark.svg">
+      <img alt="Atlas" src="assets/atlas-logo-light.svg" width="202">
+    </picture>
+  </a>
+</p>
 
-**AI Engineering Toolkit for Governed Systems**
-
-<p>
+<p align="center">
   <a href="https://blazity.com/atlas"><img alt="Atlas" src="https://img.shields.io/badge/Atlas-Governed_AI_Engineering-FD6027?style=for-the-badge"></a>
   <img alt="Self hosted" src="https://img.shields.io/badge/self--hosted-ready-181B20?style=for-the-badge">
   <img alt="Open source" src="https://img.shields.io/badge/open_source-toolkit-BBED80?style=for-the-badge&labelColor=181B20">
 </p>
+
+---
+
+**AI Engineering Toolkit for Governed Systems**
 
 Move from plan to production fast. Atlas puts governed AI engineering tools inside your development lifecycle: open source, self-hosted, and built to run on any defensible substrate.
 

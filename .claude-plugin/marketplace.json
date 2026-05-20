@@ -23,7 +23,7 @@
     },
     {
       "name": "ai-harness",
-      "description": "Bootstrap and maintain a repo-owned .ai workspace with deterministic CLI checks and an agent-led setup skill.",
+      "description": "Bootstrap and maintain a repo-owned .ai workspace through the published AI Harness CLI.",
       "author": {
         "name": "Blazity"
       },

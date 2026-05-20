@@ -20,6 +20,20 @@
         "ref": "main"
       },
       "homepage": "https://github.com/Blazity/nextjs-migration-plugin"
+    },
+    {
+      "name": "ai-harness",
+      "description": "Bootstrap and maintain a repo-owned .ai workspace through the published AI Harness CLI.",
+      "author": {
+        "name": "Blazity"
+      },
+      "category": "development",
+      "source": {
+        "source": "github",
+        "repo": "Blazity/ai-harness",
+        "ref": "main"
+      },
+      "homepage": "https://github.com/Blazity/ai-harness"
     }
   ]
 }

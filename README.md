@@ -61,7 +61,7 @@ Move software work from issue to plan, implementation, review, and pull request 
   <img alt="GitHub stars" src="https://img.shields.io/github/stars/Blazity/ai-harness?style=flat-square">
 </p>
 
-Install and maintain a repo-owned `.ai` workspace with agent instructions, durable memory, artifact routing, drift checks, and a local maintenance skill.
+Install and maintain a repo-owned `.ai` workspace with agent instructions, durable memory, artifact routing, drift checks, and a local setup skill.
 
 [Repository](https://github.com/Blazity/ai-harness)
 
@@ -124,6 +124,9 @@ Atlas is also the Blazity Claude Code plugin marketplace:
 
 ```text
 /plugin marketplace add Blazity/atlas
+/plugin install ai-harness@blazity
+/ai-harness:setup
+
 /plugin install nextjs-migration-plugin@blazity
 ```
 

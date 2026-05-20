@@ -57,10 +57,13 @@ Move software work from issue to plan, implementation, review, and pull request 
 
 <p>
   <img alt="Pillar: Foundation" src="https://img.shields.io/badge/pillar-foundation-FD6027?style=flat-square">
-  <img alt="Status: coming soon" src="https://img.shields.io/badge/status-coming_soon-9CA3AF?style=flat-square">
+  <img alt="Status: live" src="https://img.shields.io/badge/status-live-BBED80?style=flat-square&labelColor=181B20">
+  <img alt="GitHub stars" src="https://img.shields.io/github/stars/Blazity/ai-harness?style=flat-square">
 </p>
 
-Shared rules, memory, gates, evals, and runtime conventions for Atlas tools and custom agent workflows.
+Install and maintain a repo-owned `.ai` workspace with agent instructions, durable memory, artifact routing, drift checks, and a local maintenance skill.
+
+[Repository](https://github.com/Blazity/ai-harness)
 
 ## Why Atlas Exists
 
@@ -88,7 +91,7 @@ Autonomous operators around the platform.
 
 Atlas Agents are designed to work inside bounded contexts, with logs, policies, evals, permissions, and review paths. The point is not a black-box assistant. The point is repeatable work that can be inspected and improved.
 
-AI Harness is coming soon as the shared foundation for this layer.
+Start with [AI Harness](https://github.com/Blazity/ai-harness) as the shared foundation for this layer.
 
 ### Workflow
 
@@ -113,7 +116,7 @@ If you want to migrate a site to Next.js, start with **Next.js Migration Plugin*
 
 If you want governed ticket-to-PR automation, start with **AI Workflow**.
 
-If you want the shared foundation behind Atlas tools, watch for **AI Harness**.
+If you want the shared foundation behind Atlas tools, start with **[AI Harness](https://github.com/Blazity/ai-harness)**.
 
 ## Claude Code Marketplace
 

@@ -29,8 +29,8 @@ Atlas is not a monorepo. This repository is the **Atlas catalog**: the place to 
 
 <p>
   <img alt="Pillar: Platform" src="https://img.shields.io/badge/pillar-platform-FD6027?style=flat-square">
-  <img alt="Status: private beta" src="https://img.shields.io/badge/status-private_beta-BBED80?style=flat-square&labelColor=181B20">
-  <img alt="Repo: private" src="https://img.shields.io/badge/repo-private-181B20?style=flat-square">
+  <img alt="Status: beta" src="https://img.shields.io/badge/status-beta-BBED80?style=flat-square&labelColor=181B20">
+  <img alt="GitHub stars" src="https://img.shields.io/github/stars/Blazity/nextjs-migration-plugin?style=flat-square">
 </p>
 
 Migrate existing websites into structured Next.js projects with guided discovery, component planning, build gates, and visual verification.

@@ -5,6 +5,7 @@ import { exitCodeForFindings, formatFindings } from "./output.js";
 import { gitStatus, isGitRepo } from "./repo.js";
 import { detectMode } from "./ui/runtime.js";
 import { runInteractiveInit } from "./ui/flow.js";
+import { colorizeDoctorOutput, doctorMark } from "./ui/doctor.js";
 
 export async function runCli(argv = process.argv.slice(2), options = {}) {
   const cwd = options.cwd ?? process.cwd();
@@ -101,6 +102,19 @@ export async function main() {
         color: mode.color,
         force: parsed.flags.has("force")
       });
+      return;
+    }
+
+    if (parsed.command === "doctor" && !parsed.help && !parsed.error && mode.interactive) {
+      process.stdout.write(`${doctorMark({ color: mode.color })}\n\n`);
+      const doctorResult = await runCli(argv);
+      if (doctorResult.stdout) {
+        process.stdout.write(colorizeDoctorOutput(doctorResult.stdout, { color: mode.color }));
+      }
+      if (doctorResult.stderr) {
+        process.stderr.write(doctorResult.stderr);
+      }
+      process.exitCode = doctorResult.exitCode;
       return;
     }
 

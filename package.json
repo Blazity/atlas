@@ -1,0 +1,32 @@
+{
+  "name": "@blazity-atlas/atlas",
+  "version": "0.2.0",
+  "description": "Config-driven repo memory, rules, skills, and templates for AI agents — the Atlas CLI.",
+  "type": "module",
+  "bin": {
+    "atlas": "bin/atlas.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "skills/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "check": "node --test",
+    "pack:smoke": "node test/pack-smoke.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Blazity/atlas.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT"
+}

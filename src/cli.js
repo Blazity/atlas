@@ -95,10 +95,18 @@ export async function main() {
     });
 
     if (parsed.command === "init" && !parsed.help && !parsed.error && mode.interactive && !parsed.flags.has("dry-run")) {
-      const templateName = parsed.flags.get("template");
+      const rawTemplate = parsed.flags.get("template");
+      const templateName = typeof rawTemplate === "string" ? rawTemplate : "standard";
+      const templateError = validateTemplateName(templateName);
+      if (templateError) {
+        process.stdout.write(helpText());
+        process.stderr.write(`${templateError}\n`);
+        process.exitCode = 2;
+        return;
+      }
       process.exitCode = await runInteractiveInit({
         cwd: process.cwd(),
-        templateName: typeof templateName === "string" ? templateName : "standard",
+        templateName,
         color: mode.color,
         force: parsed.flags.has("force")
       });

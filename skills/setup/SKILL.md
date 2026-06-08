@@ -18,16 +18,16 @@ Before inspecting repository meaning, announce the deterministic setup steps you
 From the repository root, run:
 
 ```bash
-npx --yes @blazity-atlas/atlas@latest doctor
+npx --yes @blazity-atlas/core@latest doctor
 ```
 
 Then follow the CLI result:
 
-- If Atlas is missing or mostly uninitialized, run `npx --yes @blazity-atlas/atlas@latest init`.
-- If `doctor` reports only fixable drift, run `npx --yes @blazity-atlas/atlas@latest doctor --fix`.
+- If Atlas is missing or mostly uninitialized, run `npx --yes @blazity-atlas/core@latest init`.
+- If `doctor` reports only fixable drift, run `npx --yes @blazity-atlas/core@latest doctor --fix`.
 - If `doctor --fix` refuses because of a dirty worktree, stop and ask the user whether to commit, stash, or explicitly rerun with `--force`. Do not use `--force` automatically.
 - If `doctor` reports manual conflicts, summarize those conflicts and stop before semantic setup.
-- Rerun `npx --yes @blazity-atlas/atlas@latest doctor` after any init or fix command.
+- Rerun `npx --yes @blazity-atlas/core@latest doctor` after any init or fix command.
 - Continue only when `doctor` exits clean.
 
 If the current directory is not a git repository, stop and ask the user to run the skill from the repository root or initialize git first.
@@ -73,7 +73,7 @@ Good questions cover: product purpose, target users, current direction, deploy/r
 - Fill `.ai/memory/product.md`, `.ai/memory/architecture.md`, and `.ai/memory/stack.md` with stable facts only.
 - Append `.ai/memory/lessons.md` only for proven non-obvious pitfalls.
 - Do not create new artifact roots. Use `.ai/config.json` paths.
-- Run `npx --yes @blazity-atlas/atlas@latest doctor` again before reporting completion.
+- Run `npx --yes @blazity-atlas/core@latest doctor` again before reporting completion.
 
 ## Quality Bar
 

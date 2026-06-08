@@ -23,12 +23,12 @@ Atlas is Blazity's standard for governed AI engineering. It brings agents into y
 
 ## Atlas Core
 
-**Atlas Core** is the installable layer of the standard — the npm package `@blazity-atlas/atlas` (CLI `atlas`, plugin `atlas`). It brings the Atlas standard into any git repository: repo memory, rules, skills, templates, review artifacts, and operating context. Concretely, that means a repo-owned `.ai/` workspace, cross-agent `AGENTS.md` instructions, artifact routing, drift checks via `doctor`, and a local `setup` skill.
+**Atlas Core** is the installable layer of the standard — the npm package `@blazity-atlas/core` (CLI `atlas`, plugin `atlas`). It brings the Atlas standard into any git repository: repo memory, rules, skills, templates, review artifacts, and operating context. Concretely, that means a repo-owned `.ai/` workspace, cross-agent `AGENTS.md` instructions, artifact routing, drift checks via `doctor`, and a local `setup` skill.
 
 Run in the root of a git repository:
 
 ```bash
-npx --yes @blazity-atlas/atlas@latest init
+npx --yes @blazity-atlas/core@latest init
 ```
 
 > Atlas Core was formerly published as AI Harness. The CLI and behavior are the same under the new name.
@@ -40,7 +40,7 @@ Public setup always goes through the published npm package. Do not copy this rep
 Pick a deterministic starter template when you already know the repository shape:
 
 ```bash
-npx --yes @blazity-atlas/atlas@latest init --template app
+npx --yes @blazity-atlas/core@latest init --template app
 ```
 
 Available templates are `standard`, `library`, `app`, `monorepo`, and `agency`.
@@ -48,7 +48,7 @@ Available templates are `standard`, `library`, `app`, `monorepo`, and `agency`.
 Preview first:
 
 ```bash
-npx --yes @blazity-atlas/atlas@latest init --dry-run
+npx --yes @blazity-atlas/core@latest init --dry-run
 ```
 
 The installer is idempotent. It creates `.ai/config.json`, the configured `.ai/` folders, `AGENTS.md` managed instructions, a Claude shim, supported skill-discovery links, and a local `setup` skill when it can do so safely.
@@ -60,12 +60,12 @@ You can also start from the skill first. In that flow the agent must still use t
 ### Commands
 
 ```bash
-npx --yes @blazity-atlas/atlas@latest init          # Install or refresh managed files
-npx --yes @blazity-atlas/atlas@latest init --template app
-npx --yes @blazity-atlas/atlas@latest init --dry-run
-npx --yes @blazity-atlas/atlas@latest doctor        # Inspect drift; no writes
-npx --yes @blazity-atlas/atlas@latest doctor --fix  # Apply safe deterministic repairs
-npx --yes @blazity-atlas/atlas@latest doctor --fix --force
+npx --yes @blazity-atlas/core@latest init          # Install or refresh managed files
+npx --yes @blazity-atlas/core@latest init --template app
+npx --yes @blazity-atlas/core@latest init --dry-run
+npx --yes @blazity-atlas/core@latest doctor        # Inspect drift; no writes
+npx --yes @blazity-atlas/core@latest doctor --fix  # Apply safe deterministic repairs
+npx --yes @blazity-atlas/core@latest doctor --fix --force
 ```
 
 `doctor` is the dry run for repairs. It reports fixable issues separately from manual conflicts. `doctor --fix` only applies the fixable set, and requires `--force` when the git worktree is dirty.
@@ -129,7 +129,7 @@ Atlas is also the Blazity Claude Code plugin marketplace:
 /plugin install nextjs-migration-plugin@blazity
 ```
 
-The `atlas` plugin exposes the `setup` skill. It does not replace the npm package or duplicate installer logic; the skill still calls the same `npx --yes @blazity-atlas/atlas@latest ...` commands that a human would run.
+The `atlas` plugin exposes the `setup` skill. It does not replace the npm package or duplicate installer logic; the skill still calls the same `npx --yes @blazity-atlas/core@latest ...` commands that a human would run.
 
 More Blazity plugins will be listed here over time. Each plugin repository remains authoritative for issues, releases, license, and contribution.
 

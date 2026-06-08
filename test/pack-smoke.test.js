@@ -30,8 +30,8 @@ test("packed CLI initializes and doctors a temp repo", async () => {
     assert.match(init.stdout, /Atlas init/);
     assert.match(doctor.stdout, /No issues found/);
     assert.match(skill, /name: setup/);
-    assert.match(skill, /npx --yes @blazity-atlas\/atlas@latest init/);
-    assert.match(skill, /npx --yes @blazity-atlas\/atlas@latest doctor --fix/);
+    assert.match(skill, /npx --yes @blazity-atlas\/core@latest init/);
+    assert.match(skill, /npx --yes @blazity-atlas\/core@latest doctor --fix/);
     assert.match(skill, /customization\.md/);
     assert.match(customization, /Atlas Customization/);
   } finally {
@@ -45,7 +45,7 @@ test("packed CLI initializes and doctors a temp repo", async () => {
 test("package publishes scoped package publicly by default", async () => {
   const packageJson = JSON.parse(await readFile(path.join(process.cwd(), "package.json"), "utf8"));
 
-  assert.equal(packageJson.name, "@blazity-atlas/atlas");
+  assert.equal(packageJson.name, "@blazity-atlas/core");
   assert.equal(packageJson.publishConfig?.access, "public");
 });
 

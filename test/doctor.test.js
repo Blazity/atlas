@@ -49,9 +49,9 @@ test("init creates a clean harness and is idempotent", async () => {
     assert.match(configAfterFirstRun, /"schemaVersion": 1/);
     assert.match(skillAfterFirstRun, /name: setup/);
     assert.match(skillAfterFirstRun, /Bootstrap \/ Update Harness/);
-    assert.match(skillAfterFirstRun, /npx --yes @blazity-atlas\/atlas@latest init/);
-    assert.match(skillAfterFirstRun, /npx --yes @blazity-atlas\/atlas@latest doctor/);
-    assert.match(skillAfterFirstRun, /npx --yes @blazity-atlas\/atlas@latest doctor --fix/);
+    assert.match(skillAfterFirstRun, /npx --yes @blazity-atlas\/core@latest init/);
+    assert.match(skillAfterFirstRun, /npx --yes @blazity-atlas\/core@latest doctor/);
+    assert.match(skillAfterFirstRun, /npx --yes @blazity-atlas\/core@latest doctor --fix/);
     assert.match(skillAfterFirstRun, /dirty worktree/);
     assert.match(skillAfterFirstRun, /manual conflicts/);
     assert.match(skillAfterFirstRun, /Refresh/);

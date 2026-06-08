@@ -62,6 +62,6 @@ Use configured paths, not hardcoded locations.
 
 After applying customization:
 
-1. Run `npx --yes @blazity-atlas/atlas@latest doctor`.
+1. Run `npx --yes @blazity-atlas/core@latest doctor`.
 2. Stop if doctor reports manual conflicts.
 3. Summarize the customization choices and files changed.

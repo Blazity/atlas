@@ -41,10 +41,12 @@ test("init creates a clean harness and is idempotent", async () => {
     assert.equal(first.exitCode, 0);
     assert.equal(second.exitCode, 0);
     assert.equal(doctor.exitCode, 0);
-    assert.match(first.stdout, /^Applied changes:$/m);
+    assert.match(first.stdout, /^Created\s+\.ai\/config\.json$/m);
+    assert.match(first.stdout, /changes applied/);
+    assert.match(second.stdout, /Already up to date/);
     assert.doesNotMatch(first.stdout, /^Fixable:$/m);
     assert.match(first.stdout, /setup/);
-    assert.match(first.stdout, /Claude users can install the `atlas` plugin/);
+    assert.match(first.stdout, /Claude Code: run \/atlas:setup/);
     assert.match(first.stdout, /\/atlas:setup/);
     assert.match(configAfterFirstRun, /"schemaVersion": 1/);
     assert.match(skillAfterFirstRun, /name: setup/);
@@ -445,5 +447,13 @@ test("doctor validates config shape", async () => {
 
     assert.equal(result.exitCode, 2);
     assert.match(result.stdout, /schemaVersion/);
+  });
+});
+
+test("init accepts the --ci flag and stays non-interactive", async () => {
+  await withTempRepo(async (directory) => {
+    const result = await runCli(["init", "--ci"], { cwd: directory });
+    assert.equal(result.exitCode, 0);
+    assert.match(result.stdout, /^Created\s+\.ai\/config\.json$/m);
   });
 });

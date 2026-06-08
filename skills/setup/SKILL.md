@@ -39,6 +39,22 @@ If the current directory is not a git repository, stop and ask the user to run t
 3. Infer only obvious facts from code. Ask about product, domain, ownership, and workflow details that code cannot answer.
 4. Mark unknowns explicitly instead of inventing facts.
 
+## Template Selection
+
+After grounding, choose the Atlas template that best fits the repository. The
+available templates are `standard, app, library, monorepo, agency` (the CLI's
+`getTemplateNames()`). They differ only in `pathAliases` — which conventional
+`docs/*` folders map into the `.ai/` tree — so the choice is safe to refine.
+
+- Infer the fit from the repo: a deployed product → `app`; a publishable
+  package/SDK → `library`; workspaces → `monorepo`; multi-client delivery →
+  `agency`; otherwise `standard`.
+- Recommend the template to the user with a one-line rationale before applying.
+- Apply it by setting `.ai/config.json`'s `template` field and merging that
+  template's `pathAliases`. Do not invent new artifact roots.
+- Re-run `npx --yes @blazity-atlas/core@latest doctor` afterward and continue
+  only when it exits clean.
+
 ## Customization Gate
 
 After deterministic setup is clean and the repository has been inspected, ask whether the user wants standard setup or repository-specific Atlas customization.

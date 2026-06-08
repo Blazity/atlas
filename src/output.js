@@ -41,3 +41,21 @@ export function exitCodeForFindings(findings) {
   }
   return 2;
 }
+
+const VERB_WIDTH = 8;
+const DRY_VERB = { Created: "Would create", Updated: "Would update", Linked: "Would link", Moved: "Would move" };
+
+export function formatApplied(actions, { dryRun = false } = {}) {
+  if (actions.length === 0) {
+    return "Already up to date — nothing to write.\n";
+  }
+
+  const lines = actions.map((action) => {
+    const verb = dryRun ? DRY_VERB[action.verb] : action.verb;
+    return `${verb.padEnd(VERB_WIDTH)} ${action.target}`;
+  });
+
+  const noun = actions.length === 1 ? "change" : "changes";
+  const summary = `${actions.length} ${noun} ${dryRun ? "planned" : "applied"}`;
+  return `${lines.join("\n")}\n\n${summary}\n`;
+}

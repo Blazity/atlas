@@ -61,18 +61,15 @@ export function defaultCustomizationMd() {
   return readFileSync(new URL("../skills/setup/customization.md", import.meta.url), "utf8").replace(/\n$/u, "");
 }
 
-export function initNextStepText(templateName = "standard") {
+export function initNextStepText() {
   return [
-    `Template: ${templateName}`,
+    "Next step — paste this to your coding agent:",
     "",
-    "Next step:",
-    "Ask your agent to use the `setup` skill.",
-    "CLI-first users can run `npx --yes @blazity-atlas/core@latest init --template <name>`, then continue with the local setup skill.",
-    "Claude users can install the `atlas` plugin from the Blazity marketplace and run `/atlas:setup`.",
-    "If you start from the skill first, it will run `npx --yes @blazity-atlas/core@latest init` or `doctor` for you before asking setup questions.",
-    "The setup skill will ask whether you want standard setup or repository-specific customization.",
+    "  Finish the Atlas setup on this repository: use the `setup` skill to",
+    "  inspect the repo, confirm or refine the template, and fill AGENTS.md",
+    "  and the .ai/ memory files.",
     "",
-    "Suggested prompt:",
-    "\"Use the setup skill to inspect this repository. Ask whether I want standard setup or customization, then fill the initial AGENTS.md and .ai memory files.\""
+    "Claude Code: run /atlas:setup",
+    "Repair drift later: atlas doctor --fix"
   ].join("\n");
 }

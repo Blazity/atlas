@@ -3,6 +3,8 @@ import { runInit } from "./init.js";
 import { getTemplateNames } from "./config.js";
 import { exitCodeForFindings, formatFindings } from "./output.js";
 import { gitStatus, isGitRepo } from "./repo.js";
+import { detectMode } from "./ui/runtime.js";
+import { runInteractiveInit } from "./ui/flow.js";
 
 export async function runCli(argv = process.argv.slice(2), options = {}) {
   const cwd = options.cwd ?? process.cwd();
@@ -81,7 +83,28 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
 
 export async function main() {
   try {
-    const result = await runCli();
+    const argv = process.argv.slice(2);
+    const parsed = parseArgs(argv);
+    const mode = detectMode({
+      stdoutIsTTY: process.stdout.isTTY,
+      stdinIsTTY: process.stdin.isTTY,
+      env: process.env,
+      yes: parsed.flags?.has?.("yes") ?? false,
+      ci: parsed.flags?.has?.("ci") ?? false
+    });
+
+    if (parsed.command === "init" && !parsed.help && !parsed.error && mode.interactive && !parsed.flags.has("dry-run")) {
+      const templateName = parsed.flags.get("template");
+      process.exitCode = await runInteractiveInit({
+        cwd: process.cwd(),
+        templateName: typeof templateName === "string" ? templateName : "standard",
+        color: mode.color,
+        force: parsed.flags.has("force")
+      });
+      return;
+    }
+
+    const result = await runCli(argv);
     if (result.stdout) {
       process.stdout.write(result.stdout);
     }

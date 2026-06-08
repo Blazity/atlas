@@ -41,3 +41,26 @@ export function gradientLine(text, fromHex, toHex, { color }) {
     })
     .join("") + RESET;
 }
+
+// One animation frame of the orange→yellow shimmer: a bright (yellow) band
+// peaks where `(index/last - phase)` wraps to the middle, so advancing `phase`
+// from 0 sweeps the highlight across the text. `phase` may exceed 1 (it wraps).
+export function shimmerLine(text, phase, { color }) {
+  if (!color) {
+    return text;
+  }
+  const [or, og, ob] = toRgb(PALETTE.orange);
+  const [yr, yg, yb] = toRgb(PALETTE.yellow);
+  const chars = [...text];
+  const last = Math.max(1, chars.length - 1);
+  return chars
+    .map((char, index) => {
+      const wrapped = (((index / last - phase) % 1) + 1) % 1;
+      const t = 1 - Math.abs(2 * wrapped - 1);
+      const r = Math.round(or + (yr - or) * t);
+      const g = Math.round(og + (yg - og) * t);
+      const b = Math.round(ob + (yb - ob) * t);
+      return `\x1b[38;2;${r};${g};${b}m${char}`;
+    })
+    .join("") + RESET;
+}

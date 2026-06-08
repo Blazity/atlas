@@ -1,6 +1,7 @@
-import { collectDoctorFindings, applyFixes, loadConfig } from "./doctor.js";
+import { applyFixes } from "./doctor.js";
 import { gitStatus, isGitRepo } from "./repo.js";
-import { formatFindings } from "./output.js";
+import { formatApplied, formatFindings } from "./output.js";
+import { buildPlan } from "./plan.js";
 import { initNextStepText } from "./templates.js";
 
 export async function runInit(options) {
@@ -9,22 +10,13 @@ export async function runInit(options) {
     return { exitCode: 2, stdout: "", stderr: "Refusing to initialize: current directory is not a git repository.\n" };
   }
 
-  const requestedTemplateName = options.templateName ?? "standard";
-  const loadedConfig = await loadConfig(cwd, { templateName: requestedTemplateName });
-  const effectiveTemplateName = loadedConfig.exists ? loadedConfig.config.template ?? "custom" : requestedTemplateName;
-  const findings = await collectDoctorFindings(cwd, { templateName: requestedTemplateName });
-  const manualFindings = findings.filter((finding) => !finding.fixable);
-  const fixableFindings = findings.filter((finding) => finding.fixable);
+  const plan = await buildPlan(cwd, { templateName: options.templateName ?? "standard" });
 
-  if (manualFindings.length > 0) {
-    return {
-      exitCode: 2,
-      stdout: `Atlas init\n${formatFindings(findings)}`,
-      stderr: ""
-    };
+  if (plan.conflicts.length > 0) {
+    return { exitCode: 2, stdout: `Atlas init\n${formatFindings([...plan.conflicts, ...plan.fixable])}`, stderr: "" };
   }
 
-  if (!options.dryRun && !options.force && fixableFindings.length > 0) {
+  if (!options.dryRun && !options.force && plan.fixable.length > 0) {
     const status = await gitStatus(cwd);
     if (status) {
       return {
@@ -36,14 +28,13 @@ export async function runInit(options) {
   }
 
   if (!options.dryRun) {
-    await applyFixes(fixableFindings);
+    await applyFixes(plan.fixable);
   }
 
   const title = options.dryRun ? "Atlas init dry run" : "Atlas init";
-  const nextStep = options.dryRun ? "" : `\n${initNextStepText(effectiveTemplateName)}\n`;
-  return {
-    exitCode: 0,
-    stdout: `${title}\n${formatFindings(fixableFindings, { emptyMessage: "No changes needed.", fixableHeading: "Applied changes:" })}${nextStep}`,
-    stderr: ""
-  };
+  const body = formatApplied(plan.actions, { dryRun: Boolean(options.dryRun) });
+  const meta = `Template: ${plan.templateName}\n`;
+  const nextStep = options.dryRun ? "" : `\n${initNextStepText()}\n`;
+
+  return { exitCode: 0, stdout: `${title}\n\n${body}${meta}${nextStep}`, stderr: "" };
 }

@@ -20,7 +20,7 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
   }
 
   if (parsed.command === "init") {
-    const validation = validateFlags(parsed.flags, ["dry-run", "force", "yes", "template"]);
+    const validation = validateFlags(parsed.flags, ["dry-run", "force", "yes", "ci", "template"]);
     if (validation) {
       return { exitCode: 2, stdout: helpText(), stderr: `${validation}\n` };
     }
@@ -196,7 +196,7 @@ function helpText() {
   return `Atlas CLI
 
 Usage:
-  atlas init [--dry-run] [--force] [--template <name>]
+  atlas init [--dry-run] [--force] [--yes] [--ci] [--template <name>]
   atlas doctor [--fix] [--force]
 
 Commands:
@@ -206,6 +206,7 @@ Commands:
 
 Templates:
   ${getTemplateNames().join(", ")}
+  (usually chosen for you by the setup skill after it inspects the repo)
 
 `;
 }

@@ -449,3 +449,11 @@ test("doctor validates config shape", async () => {
     assert.match(result.stdout, /schemaVersion/);
   });
 });
+
+test("init accepts the --ci flag and stays non-interactive", async () => {
+  await withTempRepo(async (directory) => {
+    const result = await runCli(["init", "--ci"], { cwd: directory });
+    assert.equal(result.exitCode, 0);
+    assert.match(result.stdout, /^Created\s+\.ai\/config\.json$/m);
+  });
+});

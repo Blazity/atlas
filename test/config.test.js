@@ -1,0 +1,81 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  createConfigForTemplate,
+  createDefaultConfig,
+  getTemplateNames,
+  resolveArtifactPath,
+  resolveAliasDestination,
+  validateConfig
+} from "../src/config.js";
+
+test("creates the default config with root-relative paths and aliases", () => {
+  const config = createDefaultConfig();
+
+  assert.equal(config.schemaVersion, 1);
+  assert.equal(config.template, "standard");
+  assert.equal(config.artifactRoot, ".ai");
+  assert.equal(config.paths.plans, "plans");
+  assert.equal(config.paths.adrs, "decisions/adrs");
+  assert.equal(config.pathAliases["docs/superpowers/plans"], "plans");
+  assert.equal(config.pathAliases["docs/superpowers"], undefined);
+});
+
+test("creates deterministic configs for supported templates", () => {
+  assert.deepEqual(getTemplateNames(), ["standard", "library", "app", "monorepo", "agency"]);
+
+  const app = createConfigForTemplate("app");
+  const monorepo = createConfigForTemplate("monorepo");
+
+  assert.equal(app.template, "app");
+  assert.equal(app.pathAliases["docs/qa"], "results");
+  assert.equal(app.pathAliases["docs/runbooks"], "decisions");
+  assert.equal(monorepo.template, "monorepo");
+  assert.equal(monorepo.pathAliases["docs/packages"], "research");
+  assert.throws(() => createConfigForTemplate("unknown"), /Unknown Atlas template: unknown/);
+});
+
+test("validates required config fields", () => {
+  const valid = validateConfig(createDefaultConfig());
+  const invalid = validateConfig({ schemaVersion: 2, artifactRoot: "", paths: {}, pathAliases: [] });
+
+  assert.deepEqual(valid.errors, []);
+  assert.match(invalid.errors.join("\n"), /schemaVersion/);
+  assert.match(invalid.errors.join("\n"), /artifactRoot/);
+  assert.match(invalid.errors.join("\n"), /pathAliases/);
+});
+
+test("rejects relative config paths that escape their configured roots", () => {
+  const config = createDefaultConfig();
+
+  const invalid = validateConfig({
+    ...config,
+    artifactRoot: "../outside",
+    paths: { ...config.paths, plans: "../plans" },
+    pathAliases: { ...config.pathAliases, "../outside-alias": "plans", "docs/escape": "../outside-target" }
+  });
+
+  assert.match(invalid.errors.join("\n"), /artifactRoot/);
+  assert.match(invalid.errors.join("\n"), /paths\.plans/);
+  assert.match(invalid.errors.join("\n"), /pathAliases\.\.\.\/outside-alias/);
+  assert.match(invalid.errors.join("\n"), /pathAliases\.docs\/escape/);
+});
+
+test("resolves artifact paths through artifactRoot unless absolute", () => {
+  const config = createDefaultConfig();
+
+  assert.equal(resolveArtifactPath(config, "plans"), ".ai/plans");
+  assert.equal(resolveArtifactPath(config, "adrs"), ".ai/decisions/adrs");
+  assert.equal(resolveArtifactPath({ ...config, artifactRoot: "/tmp/.ai" }, "plans"), "/tmp/.ai/plans");
+});
+
+test("resolves alias destinations while preserving nested filenames", () => {
+  const config = createDefaultConfig();
+
+  assert.equal(
+    resolveAliasDestination(config, "docs/superpowers/plans/2026-05-18-plan.md"),
+    ".ai/plans/2026-05-18-plan.md"
+  );
+  assert.equal(resolveAliasDestination(config, "docs/unknown/file.md"), null);
+});

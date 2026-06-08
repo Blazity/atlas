@@ -1,0 +1,15 @@
+{
+  "name": "atlas",
+  "displayName": "Atlas",
+  "version": "0.2.0",
+  "description": "Bootstrap and maintain a repo-owned .ai workspace through the published Atlas CLI.",
+  "author": {
+    "name": "Blazity",
+    "url": "https://github.com/Blazity"
+  },
+  "homepage": "https://github.com/Blazity/atlas",
+  "repository": "https://github.com/Blazity/atlas",
+  "license": "MIT",
+  "keywords": ["atlas", "claude-code", "agents", "documentation"],
+  "skills": "./skills/"
+}

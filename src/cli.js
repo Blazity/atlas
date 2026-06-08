@@ -80,14 +80,19 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
 }
 
 export async function main() {
-  const result = await runCli();
-  if (result.stdout) {
-    process.stdout.write(result.stdout);
+  try {
+    const result = await runCli();
+    if (result.stdout) {
+      process.stdout.write(result.stdout);
+    }
+    if (result.stderr) {
+      process.stderr.write(result.stderr);
+    }
+    process.exitCode = result.exitCode;
+  } catch (error) {
+    process.stderr.write(`${error?.message ?? error}\n`);
+    process.exitCode = 1;
   }
-  if (result.stderr) {
-    process.stderr.write(result.stderr);
-  }
-  process.exitCode = result.exitCode;
 }
 
 function parseArgs(argv) {
@@ -159,7 +164,7 @@ Usage:
 
 Commands:
   init          Install or refresh the config-driven Atlas workspace
-  doctor        Inspect harness drift; reports fixable and manual issues
+  doctor        Inspect the Atlas workspace for drift; reports fixable and manual issues
   doctor --fix  Apply safe deterministic repairs reported by doctor
 
 Templates:

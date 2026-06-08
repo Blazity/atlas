@@ -1,8 +1,7 @@
 import { mkdir, rename, rm, symlink, lstat } from "node:fs/promises";
 import path from "node:path";
 
-import { fileExists, writeText } from "./repo.js";
-import { pathExists } from "./repo.js";
+import { pathExists, writeText } from "./repo.js";
 
 export async function applyAction(action) {
   if (action.type === "mkdir") {
@@ -17,7 +16,7 @@ export async function applyAction(action) {
   }
 
   if (action.type === "move") {
-    if (await fileExists(action.toAbsolutePath)) {
+    if (await pathExists(action.toAbsolutePath)) {
       throw new Error(`Refusing to overwrite ${action.to}`);
     }
     await mkdir(path.dirname(action.toAbsolutePath), { recursive: true });

@@ -15,60 +15,69 @@
 
 ---
 
-**The standard for governed AI engineering**
+# Atlas
 
-Atlas is Blazity's standard for governed AI engineering. It brings agents into your development lifecycle through explicit rules, traceable artifacts, machine-enforced gates, and human review at the points where judgment matters: open source, self-hosted, and built to run on any defensible substrate.
+**The agentic repo standard.**
 
-> Agents can move fast. Your team still owns the system.
+Atlas gives a git repository the structure that local coding agents need before they can work safely: shared instructions, repo memory, artifact paths, setup skills, and lightweight gates for plans, decisions, research, and results.
 
-## Atlas Core
+The payoff compounds over time. You keep working normally, while Atlas turns useful project context into documentation that grows with the repo and makes each next agent run more effective.
 
-**Atlas Core** is the installable layer of the standard — the npm package `@blazity-atlas/core` (CLI `atlas`, plugin `atlas`). It brings the Atlas standard into any git repository: repo memory, rules, skills, templates, review artifacts, and operating context. Concretely, that means a repo-owned `.ai/` workspace, cross-agent `AGENTS.md` instructions, artifact routing, drift checks via `doctor`, and a local `setup` skill.
+Run one command in the root of your project. Atlas creates the deterministic structure, then hands the rest to your local agent so it can inspect the repository and finish the setup with project-specific context.
 
-Run in the root of a git repository:
+## Start Here
 
 ```bash
 npx --yes @blazity-atlas/core@latest init
 ```
 
-> Atlas Core was formerly published as AI Harness. The CLI and behavior are the same under the new name.
+Atlas previews the files it wants to write, asks for confirmation in an interactive terminal, creates the `.ai/` workspace and agent entrypoints, then prints the next prompt to give your coding agent.
 
-### Install
+Claude Code users can start from the Atlas marketplace instead:
 
-Public setup always goes through the published npm package. Do not copy this repository's `.ai/` folder or run local maintainer scripts to install Atlas Core in another product repository.
-
-Pick a deterministic starter template when you already know the repository shape:
-
-```bash
-npx --yes @blazity-atlas/core@latest init --template app
+```text
+/plugin marketplace add Blazity/atlas
+/plugin install atlas@blazity
+/atlas:setup
 ```
 
-Available templates are `standard`, `library`, `app`, `monorepo`, and `agency`.
+Both paths use the same published package, `@blazity-atlas/core`. The Claude Code plugin exposes the setup skill; the CLI still owns the deterministic file structure.
 
-Preview first:
+## What Atlas Adds
 
-```bash
-npx --yes @blazity-atlas/core@latest init --dry-run
+Atlas keeps AI-facing documentation small, explicit, and owned by the repository:
+
+```text
+.ai/
+  config.json
+  LANGUAGE.md
+  memory/
+  plans/
+  research/
+  decisions/
+  decisions/adrs/
+  results/
+  skills/setup/
+AGENTS.md
+CLAUDE.md
+.claude/skills -> ../.ai/skills
+.agents/skills -> ../.ai/skills
+.cursor/skills -> ../.ai/skills
 ```
 
-The installer is idempotent. It creates `.ai/config.json`, the configured `.ai/` folders, `AGENTS.md` managed instructions, a Claude shim, supported skill-discovery links, and a local `setup` skill when it can do so safely.
+`.ai/config.json` is the source of truth for artifact locations. If your repo already has useful docs, Atlas can map conventional paths into the `.ai/` workspace instead of inventing another documentation system.
 
-After installation, ask your agent to use the `setup` skill. The skill inspects the repository, asks whether you want standard setup or repository-specific customization, and fills the first useful `AGENTS.md`, vocabulary, and memory files. If you choose customization, the skill lazy-loads its longer customization workflow from `setup/customization.md`.
+## How Setup Continues
 
-You can also start from the skill first. In that flow the agent must still use the npm package through `npx`, checks whether Atlas Core is installed, runs `init` or `doctor --fix` when safe, and only then continues into repository questions.
+The first command only writes the shared structure. The local `setup` skill then:
 
-### Commands
+- inspects the repository before asking questions;
+- lets the agent recommend the right template after reading the project;
+- fills `AGENTS.md`, project vocabulary, and stable memory files;
+- keeps Claude, Codex, Cursor, and similar agents pointed at one shared workspace;
+- leaves plans, decisions, research, and results in predictable locations.
 
-```bash
-npx --yes @blazity-atlas/core@latest init          # Install or refresh managed files
-npx --yes @blazity-atlas/core@latest init --template app
-npx --yes @blazity-atlas/core@latest init --dry-run
-npx --yes @blazity-atlas/core@latest doctor        # Inspect drift; no writes
-npx --yes @blazity-atlas/core@latest doctor --fix  # Apply safe deterministic repairs
-npx --yes @blazity-atlas/core@latest doctor --fix --force
-```
-
-`doctor` is the dry run for repairs. It reports fixable issues separately from manual conflicts. `doctor --fix` only applies the fixable set, and requires `--force` when the git worktree is dirty.
+This keeps the human flow simple: install Atlas once, then let the local agent adapt it to the actual repository. As work continues, plans, decisions, research, and lessons accumulate where agents can find them instead of disappearing into chat history.
 
 ## Why Atlas Exists
 
@@ -87,9 +96,21 @@ Atlas is built for teams that want AI acceleration without giving up ownership. 
 - **No black boxes.** Agent work should be traceable, auditable, and reversible.
 - **Substrates change. Systems remain.** Atlas is designed to survive model and infrastructure churn.
 
+## Useful Later
+
+Run `atlas doctor` to inspect an existing Atlas workspace for drift. Run `atlas doctor --fix` to apply safe deterministic repairs when the worktree is ready for changes.
+
+## Explore
+
+<p>
+  <a href="https://blazity.com/atlas"><img alt="Atlas website" src="https://img.shields.io/badge/Atlas-website-FD6027?style=for-the-badge"></a>
+  <a href="https://blazity.com"><img alt="Blazity" src="https://img.shields.io/badge/Blazity-home-181B20?style=for-the-badge"></a>
+  <a href="https://github.com/Blazity"><img alt="Blazity GitHub" src="https://img.shields.io/badge/GitHub-Blazity-181717?style=for-the-badge&logo=github"></a>
+</p>
+
 ## Built with Atlas
 
-These products are built on the Atlas standard. Each lives in its own repository with its own roadmap, issue tracker, releases, and contribution path.
+Examples of projects built on the Atlas standard:
 
 ### Next.js Migration Plugin
 
@@ -103,8 +124,6 @@ Migrate existing websites into structured Next.js projects with guided discovery
 
 [Repository](https://github.com/Blazity/nextjs-migration-plugin)
 
----
-
 ### AI Workflow
 
 <p>
@@ -116,40 +135,3 @@ Migrate existing websites into structured Next.js projects with guided discovery
 Move software work from issue to plan, implementation, review, and pull request through governed agent workflows.
 
 [Repository](https://github.com/Blazity/ai-workflow)
-
-## Claude Code Marketplace
-
-Atlas is also the Blazity Claude Code plugin marketplace:
-
-```text
-/plugin marketplace add Blazity/atlas
-/plugin install atlas@blazity
-/atlas:setup
-
-/plugin install nextjs-migration-plugin@blazity
-```
-
-The `atlas` plugin exposes the `setup` skill. It does not replace the npm package or duplicate installer logic; the skill still calls the same `npx --yes @blazity-atlas/core@latest ...` commands that a human would run.
-
-More Blazity plugins will be listed here over time. Each plugin repository remains authoritative for issues, releases, license, and contribution.
-
-## Repository Model
-
-This repository is home to **Atlas Core** and the Blazity Claude Code plugin marketplace.
-
-Use this repository for:
-
-- Atlas Core issues and feature requests;
-- cross-product proposals;
-- marketplace and packaging ideas;
-- questions about how the pieces fit together.
-
-Products built with Atlas — the Next.js Migration Plugin and AI Workflow — keep their own repositories, roadmaps, releases, and contribution paths. Open implementation issues in the specific product repository whenever possible.
-
-## Explore
-
-<p>
-  <a href="https://blazity.com/atlas"><img alt="Atlas website" src="https://img.shields.io/badge/Atlas-website-FD6027?style=for-the-badge"></a>
-  <a href="https://blazity.com"><img alt="Blazity" src="https://img.shields.io/badge/Blazity-home-181B20?style=for-the-badge"></a>
-  <a href="https://github.com/Blazity"><img alt="Blazity GitHub" src="https://img.shields.io/badge/GitHub-Blazity-181717?style=for-the-badge&logo=github"></a>
-</p>

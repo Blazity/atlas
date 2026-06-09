@@ -21,6 +21,8 @@
 
 Atlas gives a git repository the structure that local coding agents need before they can work safely: shared instructions, repo memory, artifact paths, setup skills, and lightweight gates for plans, decisions, research, and results.
 
+The payoff compounds over time. You keep working normally, while Atlas turns useful project context into documentation that grows with the repo and makes each next agent run more effective.
+
 Run one command in the root of your project. Atlas creates the deterministic structure, then hands the rest to your local agent so it can inspect the repository and finish the setup with project-specific context.
 
 ## Start Here
@@ -75,7 +77,7 @@ The first command only writes the shared structure. The local `setup` skill then
 - keeps Claude, Codex, Cursor, and similar agents pointed at one shared workspace;
 - leaves plans, decisions, research, and results in predictable locations.
 
-This keeps the human flow simple: install Atlas once, then let the local agent adapt it to the actual repository.
+This keeps the human flow simple: install Atlas once, then let the local agent adapt it to the actual repository. As work continues, plans, decisions, research, and lessons accumulate where agents can find them instead of disappearing into chat history.
 
 ## Why Atlas Exists
 

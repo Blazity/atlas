@@ -1,6 +1,6 @@
 {
   "name": "@blazity-atlas/core",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Config-driven repo memory, rules, skills, and templates for AI agents — the Atlas CLI.",
   "type": "module",
   "bin": {

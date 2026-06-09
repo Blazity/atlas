@@ -3,6 +3,9 @@ import { runInit } from "./init.js";
 import { getTemplateNames } from "./config.js";
 import { exitCodeForFindings, formatFindings } from "./output.js";
 import { gitStatus, isGitRepo } from "./repo.js";
+import { detectMode } from "./ui/runtime.js";
+import { runInteractiveInit } from "./ui/flow.js";
+import { colorizeDoctorOutput, doctorMark } from "./ui/doctor.js";
 
 export async function runCli(argv = process.argv.slice(2), options = {}) {
   const cwd = options.cwd ?? process.cwd();
@@ -17,7 +20,7 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
   }
 
   if (parsed.command === "init") {
-    const validation = validateFlags(parsed.flags, ["dry-run", "force", "yes", "template"]);
+    const validation = validateFlags(parsed.flags, ["dry-run", "force", "yes", "ci", "template"]);
     if (validation) {
       return { exitCode: 2, stdout: helpText(), stderr: `${validation}\n` };
     }
@@ -81,7 +84,49 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
 
 export async function main() {
   try {
-    const result = await runCli();
+    const argv = process.argv.slice(2);
+    const parsed = parseArgs(argv);
+    const mode = detectMode({
+      stdoutIsTTY: process.stdout.isTTY,
+      stdinIsTTY: process.stdin.isTTY,
+      env: process.env,
+      yes: parsed.flags?.has?.("yes") ?? false,
+      ci: parsed.flags?.has?.("ci") ?? false
+    });
+
+    if (parsed.command === "init" && !parsed.help && !parsed.error && mode.interactive && !parsed.flags.has("dry-run")) {
+      const rawTemplate = parsed.flags.get("template");
+      const templateName = typeof rawTemplate === "string" ? rawTemplate : "standard";
+      const templateError = validateTemplateName(templateName);
+      if (templateError) {
+        process.stdout.write(helpText());
+        process.stderr.write(`${templateError}\n`);
+        process.exitCode = 2;
+        return;
+      }
+      process.exitCode = await runInteractiveInit({
+        cwd: process.cwd(),
+        templateName,
+        color: mode.color,
+        force: parsed.flags.has("force")
+      });
+      return;
+    }
+
+    if (parsed.command === "doctor" && !parsed.help && !parsed.error && mode.interactive) {
+      process.stdout.write(`${doctorMark({ color: mode.color })}\n\n`);
+      const doctorResult = await runCli(argv);
+      if (doctorResult.stdout) {
+        process.stdout.write(colorizeDoctorOutput(doctorResult.stdout, { color: mode.color }));
+      }
+      if (doctorResult.stderr) {
+        process.stderr.write(doctorResult.stderr);
+      }
+      process.exitCode = doctorResult.exitCode;
+      return;
+    }
+
+    const result = await runCli(argv);
     if (result.stdout) {
       process.stdout.write(result.stdout);
     }
@@ -159,7 +204,7 @@ function helpText() {
   return `Atlas CLI
 
 Usage:
-  atlas init [--dry-run] [--force] [--template <name>]
+  atlas init [--dry-run] [--force] [--yes] [--ci] [--template <name>]
   atlas doctor [--fix] [--force]
 
 Commands:
@@ -169,6 +214,7 @@ Commands:
 
 Templates:
   ${getTemplateNames().join(", ")}
+  (usually chosen for you by the setup skill after it inspects the repo)
 
 `;
 }

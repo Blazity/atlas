@@ -905,7 +905,7 @@ Expected: PASS — `flow.test.js` passes; `runCli`-based tests are unaffected be
 Run in a real terminal inside a throwaway git repo:
 ```bash
 mkdir /tmp/atlas-demo && cd /tmp/atlas-demo && git init -q
-node /Users/blazity/dev/atlas/.claude/worktrees/piped-jingling-nebula/bin/atlas.js init
+node ./bin/atlas.js init
 ```
 Expected: gradient ATLAS logo animates in; clack intro/spinner/confirm appear; choosing "Yes" writes `.ai/`; outro shows the copy-paste prompt. `Ctrl-C` at a prompt prints "Cancelled. Nothing written." Re-run with `NO_COLOR=1` to confirm plain readable output, and pipe (`| cat`) to confirm the non-interactive plain path still runs.
 

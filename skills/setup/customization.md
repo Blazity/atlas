@@ -1,6 +1,6 @@
 # Atlas Customization
 
-Use this file only after the user explicitly chooses repository-specific Atlas customization.
+Use this file only after the user explicitly accepts the end-of-setup customization offer or asks for repository-specific Atlas customization.
 
 ## Purpose
 
@@ -10,13 +10,13 @@ The CLI owns templates, paths, managed files, symlinks, and repair behavior. Thi
 
 ## Ground Rules
 
-- Read `.ai/config.json` before proposing file changes.
+- Read the workspace config before proposing file changes: `.ai/config.json`, or the `<root>/config.json` found through the `.atlas` repo-root pointer.
 - Preserve human-authored content outside managed blocks.
 - Ask one focused question at a time.
 - Prefer concrete choices with a recommended default.
 - Do not invent product, ownership, deployment, or workflow facts.
 - Do not create new artifact roots unless the user explicitly asks for them.
-- If customization changes artifact paths, update `.ai/config.json` first and run `doctor` before moving files.
+- If customization changes artifact paths, update the config first and run `doctor` before moving files.
 
 ## Interview Areas
 
@@ -24,10 +24,9 @@ Ask only for information that affects future agent behavior.
 
 Good customization topics:
 
-- artifact layout preferences;
-- enabled workflow areas: plans, research, decisions, ADRs, results, memory, vocabulary, and local skills;
+- artifact layout preferences, expressed through `artifactRoot` and `paths` in the config;
+- agent surfaces: the config's `agentSurfaces` field — an array, subset of `["claude", "agents", "cursor"]`, default all — which `doctor` enforces;
 - preferred agent strictness: lightweight, standard, or strict;
-- supported agent surfaces: AGENTS, Claude, Cursor, or generic local skills;
 - project type: app, library, monorepo, agency/client project, or custom;
 - safe commands and commands that require approval;
 - branch, release, deployment, and QA expectations;
@@ -36,7 +35,7 @@ Good customization topics:
 
 ## Template Awareness
 
-Inspect `template` in `.ai/config.json` when present.
+Inspect `template` in the workspace config when present.
 
 - `standard`: keep guidance general and concise.
 - `library`: emphasize public API stability, examples, release notes, compatibility, and documentation.
@@ -44,7 +43,7 @@ Inspect `template` in `.ai/config.json` when present.
 - `monorepo`: emphasize package boundaries, workspace commands, shared contracts, and cross-package blast radius.
 - `agency`: emphasize client context, handoff notes, decision history, vocabulary, and delivery constraints.
 
-Templates are starting points. If the repository needs a different shape, ask before changing `.ai/config.json`.
+Templates are starting points. If the repository needs a different shape, ask before changing the config.
 
 ## Update Targets
 

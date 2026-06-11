@@ -6,6 +6,7 @@ import test from "node:test";
 
 import { buildPlan } from "../src/plan.js";
 import { createConfigForTemplate } from "../src/config.js";
+import { applyFixes } from "../src/doctor.js";
 import { createGitRepo } from "./helpers/git.js";
 
 async function withTempRepo(fn) {
@@ -53,6 +54,31 @@ test("buildPlan keeps the effective template of an existing config", async () =>
 
     const plan = await buildPlan(dir, { templateName: "standard" });
     assert.equal(plan.templateName, "app");
+  });
+});
+
+test("buildPlan reports advisories separately, never as conflicts or actions", async () => {
+  await withTempRepo(async (dir) => {
+    const fresh = await buildPlan(dir, { templateName: "standard" });
+    await applyFixes(fresh.fixable);
+
+    const settled = await buildPlan(dir, { templateName: "standard" });
+
+    assert.equal(settled.conflicts.length, 0);
+    assert.equal(settled.fixable.length, 0);
+    assert.equal(settled.actions.length, 0);
+    assert.ok(settled.advisories.some((finding) => finding.code === "setup-pending"));
+  });
+});
+
+test("buildPlan scaffolds a custom workspace root with its repo-root pointer", async () => {
+  await withTempRepo(async (dir) => {
+    const plan = await buildPlan(dir, { templateName: "standard", root: ".workspace" });
+
+    assert.equal(plan.root, ".workspace");
+    assert.ok(plan.actions.some((action) => action.target.startsWith(".workspace/config.json")));
+    assert.ok(plan.actions.some((action) => action.target === ".atlas"));
+    assert.ok(!plan.actions.some((action) => action.target.startsWith(".ai/")));
   });
 });
 

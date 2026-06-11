@@ -1,7 +1,34 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { formatApplied } from "../src/output.js";
+import { exitCodeForFindings, formatApplied, formatFindings } from "../src/output.js";
+
+const fixableFinding = { code: "missing-gitkeep", message: ".ai/plans/.gitkeep is missing", severity: "fixable", fixable: true };
+const manualFinding = { code: "file-collision", message: ".ai/plans exists but is not a directory", severity: "manual", fixable: false };
+const advisoryFinding = { code: "setup-pending", message: "Atlas setup has not been completed", severity: "advisory", fixable: false };
+
+test("formatFindings renders advisories as a separate trailing section", () => {
+  const out = formatFindings([fixableFinding, manualFinding, advisoryFinding]);
+
+  assert.match(out, /^Fixable:\n- \[missing-gitkeep\]/m);
+  assert.match(out, /^Manual:\n- \[file-collision\]/m);
+  assert.match(out, /^Advisory:\n- \[setup-pending\] Atlas setup has not been completed$/m);
+  assert.match(out, /Fixable:[\s\S]*Manual:[\s\S]*Advisory:/);
+});
+
+test("formatFindings still reports no issues when only advisories exist", () => {
+  const out = formatFindings([advisoryFinding]);
+
+  assert.match(out, /^No issues found\./);
+  assert.match(out, /^Advisory:\n- \[setup-pending\]/m);
+});
+
+test("exitCodeForFindings keeps the frozen 0/1/2 contract and ignores advisories", () => {
+  assert.equal(exitCodeForFindings([]), 0);
+  assert.equal(exitCodeForFindings([advisoryFinding]), 0);
+  assert.equal(exitCodeForFindings([fixableFinding, advisoryFinding]), 1);
+  assert.equal(exitCodeForFindings([fixableFinding, manualFinding, advisoryFinding]), 2);
+});
 
 const actions = [
   { verb: "Created", target: ".ai/config.json" },

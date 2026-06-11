@@ -1,4 +1,4 @@
-import { collectDoctorFindings, loadConfig } from "./doctor.js";
+import { collectDoctorFindings, findingSeverity, loadConfig } from "./doctor.js";
 import { pathExists } from "./repo.js";
 
 export async function describeFinding(finding) {
@@ -23,16 +23,17 @@ export async function describeFinding(finding) {
   return { verb: existed ? "Updated" : "Created", target: action.relativePath };
 }
 
-export async function buildPlan(cwd, { templateName } = {}) {
+export async function buildPlan(cwd, { templateName, root } = {}) {
   const requested = templateName ?? "standard";
   // Read config once for the effective template; collectDoctorFindings re-reads it internally.
-  const loaded = await loadConfig(cwd, { templateName: requested });
+  const loaded = await loadConfig(cwd, { templateName: requested, root });
   const effectiveTemplate = loaded.exists ? (loaded.config.template ?? "custom") : requested;
 
-  const findings = await collectDoctorFindings(cwd, { templateName: requested });
-  const conflicts = findings.filter((f) => !f.fixable);
-  const fixable = findings.filter((f) => f.fixable);
+  const findings = await collectDoctorFindings(cwd, { templateName: requested, root });
+  const conflicts = findings.filter((finding) => findingSeverity(finding) === "manual");
+  const fixable = findings.filter((finding) => findingSeverity(finding) === "fixable");
+  const advisories = findings.filter((finding) => findingSeverity(finding) === "advisory");
   const actions = await Promise.all(fixable.map(describeFinding));
 
-  return { templateName: effectiveTemplate, fixable, conflicts, actions };
+  return { templateName: effectiveTemplate, root: loaded.root, fixable, conflicts, advisories, actions };
 }

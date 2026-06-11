@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import test from "node:test";
 
 import {
+  configPath,
   createConfigForTemplate,
   createDefaultConfig,
   getTemplateNames,
@@ -44,6 +46,42 @@ test("validates required config fields", () => {
   assert.match(invalid.errors.join("\n"), /schemaVersion/);
   assert.match(invalid.errors.join("\n"), /artifactRoot/);
   assert.match(invalid.errors.join("\n"), /pathAliases/);
+});
+
+test("scaffolds new configs with the setupState sentinel and all agent surfaces", () => {
+  const config = createConfigForTemplate("standard");
+
+  assert.equal(config.setupState, "scaffolded");
+  assert.deepEqual(config.agentSurfaces, ["claude", "agents", "cursor"]);
+});
+
+test("createConfigForTemplate accepts a workspace root and sets artifactRoot to it", () => {
+  assert.equal(createConfigForTemplate("standard").artifactRoot, ".ai");
+  assert.equal(createConfigForTemplate("app", ".workspace").artifactRoot, ".workspace");
+});
+
+test("validates setupState as an optional sentinel with two allowed values", () => {
+  const { setupState, ...legacy } = createDefaultConfig();
+
+  assert.deepEqual(validateConfig(legacy).errors, []);
+  assert.deepEqual(validateConfig({ ...legacy, setupState: "scaffolded" }).errors, []);
+  assert.deepEqual(validateConfig({ ...legacy, setupState: "configured" }).errors, []);
+  assert.match(validateConfig({ ...legacy, setupState: "done" }).errors.join("\n"), /setupState/);
+});
+
+test("validates agentSurfaces as an optional subset of known surfaces", () => {
+  const { agentSurfaces, ...legacy } = createDefaultConfig();
+
+  assert.deepEqual(validateConfig(legacy).errors, []);
+  assert.deepEqual(validateConfig({ ...legacy, agentSurfaces: ["claude"] }).errors, []);
+  assert.deepEqual(validateConfig({ ...legacy, agentSurfaces: ["cursor", "agents"] }).errors, []);
+  assert.match(validateConfig({ ...legacy, agentSurfaces: ["claude", "vscode"] }).errors.join("\n"), /agentSurfaces/);
+  assert.match(validateConfig({ ...legacy, agentSurfaces: "claude" }).errors.join("\n"), /agentSurfaces/);
+});
+
+test("configPath joins the workspace root with config.json", () => {
+  assert.equal(configPath("/repo"), path.join("/repo", ".ai", "config.json"));
+  assert.equal(configPath("/repo", ".workspace"), path.join("/repo", ".workspace", "config.json"));
 });
 
 test("rejects relative config paths that escape their configured roots", () => {

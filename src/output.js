@@ -1,34 +1,33 @@
-import { classifyFindings } from "./doctor.js";
+import { classifyFindings, findingSeverity } from "./doctor.js";
 
 export function formatFindings(findings, options = {}) {
-  if (findings.length === 0) {
-    return `${options.emptyMessage ?? "No issues found."}\n`;
-  }
-
-  const fixable = findings.filter((finding) => finding.fixable);
-  const manual = findings.filter((finding) => !finding.fixable);
-  const lines = [];
-  const fixableHeading = options.fixableHeading ?? "Fixable:";
-  const manualHeading = options.manualHeading ?? "Manual:";
+  const fixable = findings.filter((finding) => findingSeverity(finding) === "fixable");
+  const manual = findings.filter((finding) => findingSeverity(finding) === "manual");
+  const advisories = findings.filter((finding) => findingSeverity(finding) === "advisory");
+  const sections = [];
 
   if (fixable.length > 0) {
-    lines.push(fixableHeading);
-    for (const finding of fixable) {
-      lines.push(`- [${finding.code}] ${finding.message}`);
-    }
+    sections.push(findingSection(options.fixableHeading ?? "Fixable:", fixable));
   }
 
   if (manual.length > 0) {
-    if (lines.length > 0) {
-      lines.push("");
-    }
-    lines.push(manualHeading);
-    for (const finding of manual) {
-      lines.push(`- [${finding.code}] ${finding.message}`);
-    }
+    sections.push(findingSection(options.manualHeading ?? "Manual:", manual));
   }
 
-  return `${lines.join("\n")}\n`;
+  // Advisories are signals, not issues — the clean message stays even when they render.
+  if (sections.length === 0) {
+    sections.push(options.emptyMessage ?? "No issues found.");
+  }
+
+  if (advisories.length > 0) {
+    sections.push(findingSection(options.advisoryHeading ?? "Advisory:", advisories));
+  }
+
+  return `${sections.join("\n\n")}\n`;
+}
+
+function findingSection(heading, findings) {
+  return [heading, ...findings.map((finding) => `- [${finding.code}] ${finding.message}`)].join("\n");
 }
 
 export function exitCodeForFindings(findings) {

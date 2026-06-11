@@ -26,6 +26,7 @@ test("packed CLI initializes and doctors a temp repo", async () => {
     });
     const skill = await readFile(path.join(repo, ".ai/skills/setup/SKILL.md"), "utf8");
     const customization = await readFile(path.join(repo, ".ai/skills/setup/customization.md"), "utf8");
+    const reviewSkill = await readFile(path.join(repo, ".ai/skills/review/SKILL.md"), "utf8");
 
     assert.match(init.stdout, /Atlas init/);
     assert.match(doctor.stdout, /No issues found/);
@@ -34,6 +35,7 @@ test("packed CLI initializes and doctors a temp repo", async () => {
     assert.match(skill, /npx --yes @blazity-atlas\/core@latest doctor --fix/);
     assert.match(skill, /customization\.md/);
     assert.match(customization, /Atlas Customization/);
+    assert.match(reviewSkill, /name: review/);
   } finally {
     if (tarball) {
       await rm(tarball, { force: true });
@@ -49,7 +51,7 @@ test("package publishes scoped package publicly by default", async () => {
   assert.equal(packageJson.publishConfig?.access, "public");
 });
 
-test("Claude plugin manifest exposes the setup skill only", async () => {
+test("Claude plugin manifest exposes the managed skills directory", async () => {
   const packageJson = JSON.parse(await readFile(path.join(process.cwd(), "package.json"), "utf8"));
   const pluginJson = JSON.parse(await readFile(path.join(process.cwd(), ".claude-plugin/plugin.json"), "utf8"));
 
@@ -62,7 +64,7 @@ test("Claude plugin manifest exposes the setup skill only", async () => {
   assert.equal(pluginJson.mcpServers, undefined);
 });
 
-test("package includes standalone setup skill but excludes Claude plugin metadata", async () => {
+test("package includes standalone managed skills but excludes Claude plugin metadata", async () => {
   let tarball = null;
   try {
     const { stdout } = await execFileAsync("npm", ["pack", "--dry-run", "--json"], { cwd: process.cwd() });
@@ -71,6 +73,7 @@ test("package includes standalone setup skill but excludes Claude plugin metadat
 
     assert(files.includes("skills/setup/SKILL.md"));
     assert(files.includes("skills/setup/customization.md"));
+    assert(files.includes("skills/review/SKILL.md"));
     assert(!files.includes(".claude-plugin/plugin.json"));
   } finally {
     if (tarball) {

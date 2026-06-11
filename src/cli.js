@@ -1,6 +1,6 @@
 import { collectDoctorFindings, applyFixes } from "./doctor.js";
 import { runInit } from "./init.js";
-import { getTemplateNames } from "./config.js";
+import { getTemplateNames, workspaceRootError } from "./config.js";
 import { exitCodeForFindings, formatFindings } from "./output.js";
 import { gitStatus, isGitRepo } from "./repo.js";
 import { detectMode } from "./ui/runtime.js";
@@ -20,7 +20,7 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
   }
 
   if (parsed.command === "init") {
-    const validation = validateFlags(parsed.flags, ["dry-run", "force", "yes", "ci", "template"]);
+    const validation = validateFlags(parsed.flags, ["dry-run", "force", "yes", "ci", "template", "root"]);
     if (validation) {
       return { exitCode: 2, stdout: helpText(), stderr: `${validation}\n` };
     }
@@ -29,11 +29,16 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
     if (templateValidation) {
       return { exitCode: 2, stdout: helpText(), stderr: `${templateValidation}\n` };
     }
+    const rootValidation = validateRootFlag(parsed.flags.get("root"));
+    if (rootValidation) {
+      return { exitCode: 2, stdout: helpText(), stderr: `${rootValidation}\n` };
+    }
     return runInit({
       cwd,
       dryRun: parsed.flags.has("dry-run"),
-      force: parsed.flags.has("force") || parsed.flags.has("yes"),
-      templateName
+      force: parsed.flags.has("force"),
+      templateName,
+      root: parsed.flags.get("root")
     });
   }
 
@@ -49,7 +54,7 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
 
     const findings = await collectDoctorFindings(cwd);
     if (parsed.flags.has("fix")) {
-      const manual = findings.filter((finding) => !finding.fixable);
+      const manual = findings.filter((finding) => finding.severity === "manual");
       if (manual.length > 0) {
         return { exitCode: 2, stdout: formatFindings(findings), stderr: "" };
       }
@@ -104,11 +109,19 @@ export async function main() {
         process.exitCode = 2;
         return;
       }
+      const rootError = validateRootFlag(parsed.flags.get("root"));
+      if (rootError) {
+        process.stdout.write(helpText());
+        process.stderr.write(`${rootError}\n`);
+        process.exitCode = 2;
+        return;
+      }
       process.exitCode = await runInteractiveInit({
         cwd: process.cwd(),
         templateName,
         color: mode.color,
-        force: parsed.flags.has("force")
+        force: parsed.flags.has("force"),
+        root: parsed.flags.get("root")
       });
       return;
     }
@@ -140,6 +153,8 @@ export async function main() {
   }
 }
 
+const valueFlags = new Set(["template", "root"]);
+
 function parseArgs(argv) {
   const flags = new Map();
   let command = null;
@@ -154,17 +169,17 @@ function parseArgs(argv) {
       const rawFlag = arg.slice(2);
       const equalsIndex = rawFlag.indexOf("=");
       const flagName = equalsIndex === -1 ? rawFlag : rawFlag.slice(0, equalsIndex);
-      if (flagName === "template") {
+      if (valueFlags.has(flagName)) {
         if (equalsIndex !== -1) {
           const value = rawFlag.slice(equalsIndex + 1);
           if (!value) {
-            error = "Missing value for --template";
+            error = `Missing value for --${flagName}`;
           }
           flags.set(flagName, value);
         } else {
           const value = argv[index + 1];
           if (!value || value.startsWith("--")) {
-            error = "Missing value for --template";
+            error = `Missing value for --${flagName}`;
           } else {
             flags.set(flagName, value);
             index += 1;
@@ -200,17 +215,33 @@ function validateTemplateName(templateName) {
   return null;
 }
 
+function validateRootFlag(root) {
+  if (root === undefined) {
+    return null;
+  }
+  const error = workspaceRootError(root);
+  return error ? `Invalid --root: ${error}` : null;
+}
+
 function helpText() {
   return `Atlas CLI
 
 Usage:
-  atlas init [--dry-run] [--force] [--yes] [--ci] [--template <name>]
+  atlas init [--dry-run] [--force] [--yes] [--ci] [--template <name>] [--root <dir>]
   atlas doctor [--fix] [--force]
 
 Commands:
   init          Install or refresh the config-driven Atlas workspace
-  doctor        Inspect the Atlas workspace for drift; reports fixable and manual issues
+  doctor        Inspect the Atlas workspace for drift; reports fixable and
+                manual issues plus a non-blocking Advisory section
   doctor --fix  Apply safe deterministic repairs reported by doctor
+
+Options:
+  --root <dir>       Workspace root for init (repo-relative; default .ai)
+  --template <name>  Workspace template for init (default standard)
+  --yes              Skip prompts and take the non-interactive path;
+                     does not bypass the dirty-worktree refusal
+  --force            Proceed even when the git worktree is dirty
 
 Templates:
   ${getTemplateNames().join(", ")}

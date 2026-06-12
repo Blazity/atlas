@@ -17,4 +17,10 @@ Atlas Core is the installable layer of Blazity's Atlas standard for AI-assisted 
 Before writing plans, research, decisions, ADRs, results, memory, vocabulary, or skill outputs, resolve the destination through `artifactRoot`, `paths`, and `pathAliases`.
 If an imported skill, template, or instruction mentions a different path, map it through `.ai/config.json` before reading or writing files.
 Do not create new documentation roots unless `.ai/config.json` explicitly allows them.
+
+## Atlas Documentation Rules
+
+Durable documentation records needs, decisions, and reasons — never individuals or internal process.
+Write "memory was needed to persist context across runs", not "<name> wanted memory".
+Keep personal names, private schedules, internal-only references, and absolute local paths out of workspace artifacts.
 <!-- END ATLAS: artifact-paths -->

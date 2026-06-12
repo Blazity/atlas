@@ -1,5 +1,5 @@
 ---
-name: review
+name: atlas-review
 description: Use when an AI tool idea, plan, implementation, release, or incident needs an Atlas review — deciding whether to build, planning, challenging a plan or implementation, gating a release or promotion, or running a postmortem
 ---
 
@@ -187,7 +187,7 @@ Resolve the destination through the workspace config — never hardcode `.ai/`, 
 2. Resolve the results directory by joining the config's `artifactRoot` with its `paths.results` value.
 3. Write the artifact as `<results>/<YYYY-MM-DD>-<mode>-<tool-slug>.md`.
 
-If no config can be discovered, stop and ask the user to set up Atlas first (the setup skill and CLI own that). Do not create directories or config yourself.
+If no config can be discovered, stop and ask the user to set up Atlas first (the `atlas-setup` skill and CLI own that). Do not create directories or config yourself.
 
 Artifact format — every field present; "unknown" is allowed only as an explicit open question:
 

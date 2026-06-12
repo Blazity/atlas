@@ -1,5 +1,5 @@
 ---
-name: setup
+name: atlas-setup
 description: Use when a repository needs Atlas setup, repair/update, AGENTS.md refresh, AI memory refresh, vocabulary cleanup, or review after major codebase changes
 ---
 
@@ -88,13 +88,13 @@ Resolve every path through the config from Phase 2 — never hardcode `.ai/`.
 4. Suggest a commit of the setup result.
 5. Offer one first-value proof: answer one nontrivial question about the repository using only workspace content.
 
-After setup completes, reviews of AI tools and AI-assisted changes run through the sibling `review` skill.
+After setup completes, reviews of AI tools and AI-assisted changes run through the sibling `atlas-review` skill.
 
 ## Phase 7 — Customization Offer
 
 At the end of the flow, offer: want to tune layout, agent surfaces, or local skills?
 
-- If the user accepts, or their prompt already explicitly asked to customize Atlas, read `customization.md` from this setup skill directory and follow that workflow.
+- If the user accepts, or their prompt already explicitly asked to customize Atlas, read `customization.md` from this skill's directory and follow that workflow.
 - Otherwise, do not read `customization.md`.
 
 ## Modes

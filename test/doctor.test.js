@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { lstat, mkdtemp, mkdir, readFile, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, mkdir, readFile, readlink, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -37,8 +37,8 @@ test("init creates a clean harness and is idempotent", async () => {
     const first = await runCli(["init"], { cwd: directory });
     const configAfterFirstRun = await readFile(path.join(directory, ".ai/config.json"), "utf8");
     const agentsAfterFirstRun = await readFile(path.join(directory, "AGENTS.md"), "utf8");
-    const skillAfterFirstRun = await readFile(path.join(directory, ".ai/skills/setup/SKILL.md"), "utf8");
-    const customizationAfterFirstRun = await readFile(path.join(directory, ".ai/skills/setup/customization.md"), "utf8");
+    const skillAfterFirstRun = await readFile(path.join(directory, ".ai/skills/atlas-setup/SKILL.md"), "utf8");
+    const customizationAfterFirstRun = await readFile(path.join(directory, ".ai/skills/atlas-setup/customization.md"), "utf8");
     const second = await runCli(["init"], { cwd: directory });
     const doctor = await runCli(["doctor"], { cwd: directory });
 
@@ -50,10 +50,10 @@ test("init creates a clean harness and is idempotent", async () => {
     assert.match(second.stdout, /Already up to date/);
     assert.doesNotMatch(first.stdout, /^Fixable:$/m);
     assert.match(first.stdout, /setup/);
-    assert.match(first.stdout, /Claude Code: run \/atlas:setup/);
-    assert.match(first.stdout, /\/atlas:setup/);
+    assert.match(first.stdout, /Claude Code: run \/atlas:atlas-setup/);
+    assert.match(first.stdout, /\/atlas:atlas-setup/);
     assert.match(configAfterFirstRun, /"schemaVersion": 1/);
-    assert.match(skillAfterFirstRun, /name: setup/);
+    assert.match(skillAfterFirstRun, /name: atlas-setup/);
     assert.match(skillAfterFirstRun, /Deterministic Bootstrap/);
     assert.match(skillAfterFirstRun, /npx --yes @blazity-atlas\/core@latest init/);
     assert.match(skillAfterFirstRun, /npx --yes @blazity-atlas\/core@latest doctor/);
@@ -66,8 +66,8 @@ test("init creates a clean harness and is idempotent", async () => {
     assert.match(customizationAfterFirstRun, /artifact layout preferences/);
     assert.equal(await readFile(path.join(directory, ".ai/config.json"), "utf8"), configAfterFirstRun);
     assert.equal(await readFile(path.join(directory, "AGENTS.md"), "utf8"), agentsAfterFirstRun);
-    assert.equal(await readFile(path.join(directory, ".ai/skills/setup/SKILL.md"), "utf8"), skillAfterFirstRun);
-    assert.equal(await readFile(path.join(directory, ".ai/skills/setup/customization.md"), "utf8"), customizationAfterFirstRun);
+    assert.equal(await readFile(path.join(directory, ".ai/skills/atlas-setup/SKILL.md"), "utf8"), skillAfterFirstRun);
+    assert.equal(await readFile(path.join(directory, ".ai/skills/atlas-setup/customization.md"), "utf8"), customizationAfterFirstRun);
   });
 });
 
@@ -113,18 +113,18 @@ test("init rejects unknown templates", async () => {
 test("doctor --fix restores the managed setup skill", async () => {
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });
-    await writeFile(path.join(directory, ".ai/skills/setup/SKILL.md"), "local edit\n");
+    await writeFile(path.join(directory, ".ai/skills/atlas-setup/SKILL.md"), "local edit\n");
 
     const before = await runCli(["doctor"], { cwd: directory });
     const fix = await runCli(["doctor", "--fix", "--force"], { cwd: directory });
-    const skill = await readFile(path.join(directory, ".ai/skills/setup/SKILL.md"), "utf8");
+    const skill = await readFile(path.join(directory, ".ai/skills/atlas-setup/SKILL.md"), "utf8");
 
     assert.equal(before.exitCode, 1);
-    assert.match(before.stdout, /setup\/SKILL\.md/);
+    assert.match(before.stdout, /atlas-setup\/SKILL\.md/);
     assert.equal(fix.exitCode, 0);
     assert.match(fix.stdout, /^Applied fixes:$/m);
     assert.doesNotMatch(fix.stdout, /^Fixable:$/m);
-    assert.match(skill, /name: setup/);
+    assert.match(skill, /name: atlas-setup/);
     assert.doesNotMatch(skill, /local edit/);
   });
 });
@@ -132,14 +132,14 @@ test("doctor --fix restores the managed setup skill", async () => {
 test("doctor --fix restores the managed customization instructions", async () => {
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });
-    await writeFile(path.join(directory, ".ai/skills/setup/customization.md"), "local edit\n");
+    await writeFile(path.join(directory, ".ai/skills/atlas-setup/customization.md"), "local edit\n");
 
     const before = await runCli(["doctor"], { cwd: directory });
     const fix = await runCli(["doctor", "--fix", "--force"], { cwd: directory });
-    const customization = await readFile(path.join(directory, ".ai/skills/setup/customization.md"), "utf8");
+    const customization = await readFile(path.join(directory, ".ai/skills/atlas-setup/customization.md"), "utf8");
 
     assert.equal(before.exitCode, 1);
-    assert.match(before.stdout, /setup\/customization\.md/);
+    assert.match(before.stdout, /atlas-setup\/customization\.md/);
     assert.equal(fix.exitCode, 0);
     assert.match(fix.stdout, /^Applied fixes:$/m);
     assert.match(customization, /Atlas Customization/);
@@ -156,7 +156,7 @@ test("init leaves legacy maintain-ai-harness skill folders untouched", async () 
 
     assert.equal(result.exitCode, 0);
     assert.equal(await readFile(path.join(directory, ".ai/skills/maintain-ai-harness/SKILL.md"), "utf8"), "legacy local skill\n");
-    assert.match(await readFile(path.join(directory, ".ai/skills/setup/SKILL.md"), "utf8"), /name: setup/);
+    assert.match(await readFile(path.join(directory, ".ai/skills/atlas-setup/SKILL.md"), "utf8"), /name: atlas-setup/);
   });
 });
 
@@ -473,7 +473,7 @@ test("doctor reports setup-pending as an advisory without affecting the exit cod
     assert.equal(result.exitCode, 0);
     assert.match(result.stdout, /No issues found\./);
     assert.match(result.stdout, /^Advisory:$/m);
-    assert.match(result.stdout, /\[setup-pending\].*\.ai\/skills\/setup\/SKILL\.md/);
+    assert.match(result.stdout, /\[setup-pending\].*\.ai\/skills\/atlas-setup\/SKILL\.md/);
   });
 });
 
@@ -757,7 +757,7 @@ test("init --root roots a fresh workspace and the next step derives from it", as
 
     assert.equal(result.exitCode, 0);
     assert.match(result.stdout, /^Root: \.workspace$/m);
-    assert.match(result.stdout, /Read \.workspace\/skills\/setup\/SKILL\.md and follow it/);
+    assert.match(result.stdout, /Read \.workspace\/skills\/atlas-setup\/SKILL\.md and follow it/);
     const config = JSON.parse(await readFile(path.join(directory, ".workspace/config.json"), "utf8"));
     assert.equal(config.artifactRoot, ".workspace");
     assert.equal(await readFile(path.join(directory, ".atlas"), "utf8"), ".workspace\n");
@@ -789,7 +789,7 @@ test("rerunning init on a custom-rooted workspace derives the next step from the
     assert.equal(rerun.exitCode, 0);
     assert.match(rerun.stdout, /Already up to date/);
     assert.match(rerun.stdout, /^Root: \.workspace$/m);
-    assert.match(rerun.stdout, /Read \.workspace\/skills\/setup\/SKILL\.md and follow it/);
+    assert.match(rerun.stdout, /Read \.workspace\/skills\/atlas-setup\/SKILL\.md and follow it/);
     assert.doesNotMatch(rerun.stdout, /\.ai\/skills/);
   });
 });
@@ -807,9 +807,9 @@ test("help documents --root, the --yes/--force split, and the doctor advisory se
 test("init installs the managed review skill", async () => {
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });
-    const skill = await readFile(path.join(directory, ".ai/skills/review/SKILL.md"), "utf8");
+    const skill = await readFile(path.join(directory, ".ai/skills/atlas-review/SKILL.md"), "utf8");
 
-    assert.match(skill, /name: review/);
+    assert.match(skill, /name: atlas-review/);
     assert.match(skill, /process gate/i);
   });
 });
@@ -817,16 +817,67 @@ test("init installs the managed review skill", async () => {
 test("doctor --fix restores the managed review skill", async () => {
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });
-    await writeFile(path.join(directory, ".ai/skills/review/SKILL.md"), "local edit\n");
+    await writeFile(path.join(directory, ".ai/skills/atlas-review/SKILL.md"), "local edit\n");
 
     const before = await runCli(["doctor"], { cwd: directory });
     const fix = await runCli(["doctor", "--fix", "--force"], { cwd: directory });
-    const skill = await readFile(path.join(directory, ".ai/skills/review/SKILL.md"), "utf8");
+    const skill = await readFile(path.join(directory, ".ai/skills/atlas-review/SKILL.md"), "utf8");
 
     assert.equal(before.exitCode, 1);
-    assert.match(before.stdout, /\[stale-review-skill\] \.ai\/skills\/review\/SKILL\.md/);
+    assert.match(before.stdout, /\[stale-review-skill\] \.ai\/skills\/atlas-review\/SKILL\.md/);
     assert.equal(fix.exitCode, 0);
-    assert.match(skill, /name: review/);
+    assert.match(skill, /name: atlas-review/);
     assert.doesNotMatch(skill, /local edit/);
+  });
+});
+
+test("doctor --fix migrates an old-layout workspace to the prefixed skill directories", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+    // Simulate a workspace installed before the rename: managed files live under
+    // skills/setup and skills/review, the prefixed directories do not exist yet.
+    await mkdir(path.join(directory, ".ai/skills/setup"), { recursive: true });
+    await mkdir(path.join(directory, ".ai/skills/review"), { recursive: true });
+    await rename(path.join(directory, ".ai/skills/atlas-setup/SKILL.md"), path.join(directory, ".ai/skills/setup/SKILL.md"));
+    await rename(
+      path.join(directory, ".ai/skills/atlas-setup/customization.md"),
+      path.join(directory, ".ai/skills/setup/customization.md")
+    );
+    await rename(path.join(directory, ".ai/skills/atlas-review/SKILL.md"), path.join(directory, ".ai/skills/review/SKILL.md"));
+    await rm(path.join(directory, ".ai/skills/atlas-setup"), { recursive: true });
+    await rm(path.join(directory, ".ai/skills/atlas-review"), { recursive: true });
+
+    const before = await runCli(["doctor"], { cwd: directory });
+    const fix = await runCli(["doctor", "--fix", "--force"], { cwd: directory });
+    const after = await runCli(["doctor"], { cwd: directory });
+
+    assert.equal(before.exitCode, 1);
+    assert.match(before.stdout, /\.ai\/skills\/setup\/SKILL\.md should move to \.ai\/skills\/atlas-setup\/SKILL\.md/);
+    assert.match(before.stdout, /\.ai\/skills\/setup\/customization\.md should move to \.ai\/skills\/atlas-setup\/customization\.md/);
+    assert.match(before.stdout, /\.ai\/skills\/review\/SKILL\.md should move to \.ai\/skills\/atlas-review\/SKILL\.md/);
+    assert.equal(fix.exitCode, 0);
+    assert.equal(after.exitCode, 0);
+    assert.match(await readFile(path.join(directory, ".ai/skills/atlas-setup/SKILL.md"), "utf8"), /name: atlas-setup/);
+    assert.match(await readFile(path.join(directory, ".ai/skills/atlas-review/SKILL.md"), "utf8"), /name: atlas-review/);
+    await assert.rejects(stat(path.join(directory, ".ai/skills/setup/SKILL.md")), /ENOENT/);
+    await assert.rejects(stat(path.join(directory, ".ai/skills/review/SKILL.md")), /ENOENT/);
+  });
+});
+
+test("doctor reports a legacy skill directory alongside the new one as an advisory and never deletes it", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+    await mkdir(path.join(directory, ".ai/skills/setup"), { recursive: true });
+    await writeFile(path.join(directory, ".ai/skills/setup/SKILL.md"), "legacy copy\n");
+
+    const report = await runCli(["doctor"], { cwd: directory });
+    const fix = await runCli(["doctor", "--fix", "--force"], { cwd: directory });
+
+    assert.equal(report.exitCode, 0);
+    assert.match(report.stdout, /^Advisory:$/m);
+    assert.match(report.stdout, /\[legacy-skill-directory\] \.ai\/skills\/setup is superseded by \.ai\/skills\/atlas-setup/);
+    assert.match(report.stdout, /delete the legacy directory manually/);
+    assert.equal(fix.exitCode, 0);
+    assert.equal(await readFile(path.join(directory, ".ai/skills/setup/SKILL.md"), "utf8"), "legacy copy\n");
   });
 });

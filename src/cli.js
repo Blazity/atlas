@@ -245,7 +245,7 @@ Options:
 
 Templates:
   ${getTemplateNames().join(", ")}
-  (usually chosen for you by the setup skill after it inspects the repo)
+  (usually chosen for you by the atlas-setup skill after it inspects the repo)
 
 `;
 }

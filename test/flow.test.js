@@ -4,9 +4,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { planTreeLines, runInteractiveInit, summarizeDoctorPass } from "../src/ui/flow.js";
+import { planTreeLines, renderNextStepText, runInteractiveInit, summarizeDoctorPass } from "../src/ui/flow.js";
 import { applyFixes } from "../src/doctor.js";
 import { buildPlan } from "../src/plan.js";
+import { initNextStepText, setupHandoffPrompt } from "../src/templates.js";
 import { createGitRepo } from "./helpers/git.js";
 
 // Clack's cancel symbol is module-private and its prompts need a real TTY, so the
@@ -76,6 +77,28 @@ test("summarizeDoctorPass never claims healthy while fixable or manual findings 
   assert.doesNotMatch(verdict.summary, /healthy/);
   assert.equal(verdict.summary, "doctor · 2 issues remaining");
   assert.deepEqual(verdict.remaining.map((finding) => finding.code), ["missing-gitkeep", "alias-target-collision"]);
+});
+
+test("renderNextStepText without color is byte-identical to the plain next-step text", () => {
+  assert.equal(renderNextStepText(".ai", { color: false }), initNextStepText(".ai"));
+  assert.equal(renderNextStepText(".workspace", { color: false }), initNextStepText(".workspace"));
+});
+
+test("renderNextStepText highlights the pasteable prompt in orange and dims the surrounding text", () => {
+  const ORANGE = "\x1b[38;2;255;106;51m";
+  const DIM = "\x1b[38;2;107;113;120m";
+  const RESET = "\x1b[0m";
+  const lines = renderNextStepText(".ai", { color: true }).split("\n");
+  const promptLines = setupHandoffPrompt(".ai")
+    .split("\n")
+    .map((line) => `  ${line}`);
+
+  for (const promptLine of promptLines) {
+    assert.ok(lines.includes(`${ORANGE}${promptLine}${RESET}`), `prompt line not highlighted: ${promptLine}`);
+  }
+  assert.ok(lines.includes(`${DIM}Next step — paste this to your coding agent:${RESET}`));
+  assert.ok(lines.includes(`${DIM}Repair drift later: atlas doctor --fix${RESET}`));
+  assert.ok(lines.includes(""), "blank separator lines stay unstyled");
 });
 
 test("the root question is asked first on a fresh repo and the copy derives from the answer", async () => {
@@ -267,7 +290,7 @@ test("after a successful write the launcher offers found agents with Skip as the
     assert.deepEqual(selectOptions.options.at(0), { value: "claude", label: "claude" });
     assert.equal(launches.length, 1);
     assert.equal(launches[0].agent, fakeAgent);
-    assert.match(launches[0].prompt, /Read \.ai\/skills\/setup\/SKILL\.md and follow it/);
+    assert.match(launches[0].prompt, /Read \.ai\/skills\/atlas-setup\/SKILL\.md and follow it/);
     assert.doesNotMatch(launches[0].prompt, /paste this/i);
   });
 });

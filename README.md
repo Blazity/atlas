@@ -40,7 +40,7 @@ Claude Code users can start from the Atlas marketplace instead:
 ```text
 /plugin marketplace add Blazity/atlas
 /plugin install atlas@blazity
-/atlas:setup
+/atlas:atlas-setup
 ```
 
 Both paths use the same published package, `@blazity-atlas/core`. The Claude Code plugin exposes the managed skills; the CLI still owns the deterministic file structure.
@@ -59,8 +59,8 @@ Atlas keeps AI-facing documentation small, explicit, and owned by the repository
   decisions/
   decisions/adrs/
   results/
-  skills/setup/
-  skills/review/
+  skills/atlas-setup/
+  skills/atlas-review/
 AGENTS.md
 CLAUDE.md
 .claude/skills -> ../.ai/skills
@@ -72,7 +72,7 @@ CLAUDE.md
 
 ## How Setup Continues
 
-The first command only writes the shared structure. The printed prompt tells your agent to read `.ai/skills/setup/SKILL.md` and follow it. The `setup` skill then:
+The first command only writes the shared structure. The printed prompt tells your agent to read `.ai/skills/atlas-setup/SKILL.md` and follow it. The `atlas-setup` skill then:
 
 - inspects the repository before asking questions;
 - lets the agent recommend a template after reading the project — the five templates differ only in path aliases (which conventional docs folders get migrated), so the choice is low-stakes, agent-proposed, and refinable later;
@@ -84,9 +84,9 @@ This keeps the human flow simple: install Atlas once, then let the local agent a
 
 ## Reviews That Leave a Verdict
 
-Atlas manages a second skill: `review`. It walks a change through five modes — Intake, Plan, Review, Gate, and Postmortem — and writes its verdict (pass, conditional pass, or fail) as an artifact into the results path, where the next agent run can find it.
+Atlas manages a second skill: `atlas-review`. It walks a change through five modes — Intake, Plan, Review, Gate, and Postmortem — and writes its verdict (pass, conditional pass, or fail) as an artifact into the results path, where the next agent run can find it.
 
-Claude Code users run `/atlas:review`. Any other agent gets the same behavior from one instruction: "read `.ai/skills/review/SKILL.md`".
+Claude Code users run `/atlas:atlas-review`. Any other agent gets the same behavior from one instruction: "read `.ai/skills/atlas-review/SKILL.md`".
 
 ## Why Atlas Exists
 

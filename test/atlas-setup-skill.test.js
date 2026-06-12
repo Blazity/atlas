@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const skillUrl = new URL("../skills/setup/SKILL.md", import.meta.url);
-const customizationUrl = new URL("../skills/setup/customization.md", import.meta.url);
+const skillUrl = new URL("../skills/atlas-setup/SKILL.md", import.meta.url);
+const customizationUrl = new URL("../skills/atlas-setup/customization.md", import.meta.url);
 
 test("setup skill keeps the deterministic bootstrap contract", async () => {
   const skill = await readFile(skillUrl, "utf8");
@@ -59,7 +59,7 @@ test("setup skill flips setupState as the final act and offers a first-value pro
   assert.match(skill, /"configured"/);
   assert.match(skill, /final act/);
   assert.match(skill, /first-value proof/);
-  assert.match(skill, /`review` skill/);
+  assert.match(skill, /`atlas-review` skill/);
 });
 
 test("setup skill keeps Refresh mode and lazy end-of-flow customization", async () => {

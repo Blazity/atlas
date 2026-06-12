@@ -48,15 +48,15 @@ export function defaultMemoryReadme() {
 }
 
 export function defaultSetupSkillMd() {
-  return readPackagedSkillFile("setup/SKILL.md");
+  return readPackagedSkillFile("atlas-setup/SKILL.md");
 }
 
 export function defaultCustomizationMd() {
-  return readPackagedSkillFile("setup/customization.md");
+  return readPackagedSkillFile("atlas-setup/customization.md");
 }
 
 export function defaultReviewSkillMd() {
-  return readPackagedSkillFile("review/SKILL.md");
+  return readPackagedSkillFile("atlas-review/SKILL.md");
 }
 
 function readPackagedSkillFile(relativePath) {
@@ -64,7 +64,7 @@ function readPackagedSkillFile(relativePath) {
 }
 
 export function setupHandoffPrompt(root = ".ai") {
-  const setupSkillPath = normalizePath(path.join(root, "skills", "setup", "SKILL.md"));
+  const setupSkillPath = normalizePath(path.join(root, "skills", "atlas-setup", "SKILL.md"));
   return [
     `Read ${setupSkillPath} and follow it to finish the Atlas setup on`,
     "this repository: inspect the repo, confirm or refine the template,",
@@ -82,7 +82,7 @@ export function initNextStepText(root = ".ai") {
     "",
     indentedPrompt,
     "",
-    "Claude Code: run /atlas:setup",
+    "Claude Code: run /atlas:atlas-setup",
     "Repair drift later: atlas doctor --fix"
   ].join("\n");
 }

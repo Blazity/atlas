@@ -18,7 +18,7 @@ The CLI owns deterministic structure (scaffolding, path repair, symlink repair, 
 
 ## Managed skills
 
-The setup and review skills are managed files: doctor byte-compares them against the packaged versions and `doctor --fix` restores any drift.
+The managed skills (atlas-setup, atlas-review) are managed files: doctor byte-compares them against the packaged versions and `doctor --fix` restores any drift. Legacy installs under skills/setup and skills/review are migrated by fixable move findings; a legacy directory that collides with the new one is only reported as an advisory, never auto-deleted.
 
 ## Agent launcher
 

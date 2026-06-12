@@ -101,6 +101,10 @@ export async function collectDoctorFindings(repoRoot, options = {}) {
   await addRootPointerFindings(repoRoot, root, findings);
   await addRequiredArtifactFindings(repoRoot, config, findings);
   await addGitkeepFindings(repoRoot, config, findings);
+  // Legacy moves must precede the managed-skill findings: applyFixes runs in
+  // array order, so a legacy file is relocated before any managed write lands
+  // on the new path (a write-first order would trip the move overwrite guard).
+  await addLegacySkillMigrationFindings(repoRoot, config, findings);
   await addMaintenanceSkillFindings(repoRoot, config, findings);
   await addManagedFileFindings(repoRoot, root, findings);
   await addSkillLinkFindings(repoRoot, config, findings);
@@ -223,9 +227,53 @@ async function addGitkeepFindings(repoRoot, config, findings) {
   }
 }
 
+// Managed skills lived at skills/setup and skills/review before the rename to
+// the collision-safe prefixed directories; doctor migrates old installs.
+const legacySkillMigrations = [
+  { legacyName: "setup", currentName: "atlas-setup", fileNames: ["SKILL.md", "customization.md"] },
+  { legacyName: "review", currentName: "atlas-review", fileNames: ["SKILL.md"] }
+];
+
+async function addLegacySkillMigrationFindings(repoRoot, config, findings) {
+  const skillsRoot = resolveArtifactPath(config, "skills");
+  for (const migration of legacySkillMigrations) {
+    let currentBlocksMove = false;
+    for (const fileName of migration.fileNames) {
+      const from = normalizePath(path.join(skillsRoot, migration.legacyName, fileName));
+      const fromAbsolutePath = repoPath(repoRoot, from);
+      if ((await getPathKind(fromAbsolutePath)) !== "file") {
+        continue;
+      }
+
+      const to = normalizePath(path.join(skillsRoot, migration.currentName, fileName));
+      const toAbsolutePath = repoPath(repoRoot, to);
+      if (await fileExists(toAbsolutePath)) {
+        currentBlocksMove = true;
+      } else {
+        findings.push(fixableFinding("misplaced-legacy-skill", `${from} should move to ${to}`, {
+          type: "move",
+          from,
+          to,
+          fromAbsolutePath,
+          toAbsolutePath
+        }));
+      }
+    }
+
+    if (currentBlocksMove) {
+      const legacyPath = normalizePath(path.join(skillsRoot, migration.legacyName));
+      const currentPath = normalizePath(path.join(skillsRoot, migration.currentName));
+      findings.push(advisoryFinding(
+        "legacy-skill-directory",
+        `${legacyPath} is superseded by ${currentPath} — delete the legacy directory manually`
+      ));
+    }
+  }
+}
+
 async function addMaintenanceSkillFindings(repoRoot, config, findings) {
   await addManagedSkillFileFinding(repoRoot, config, findings, {
-    skillName: "setup",
+    skillName: "atlas-setup",
     fileName: "SKILL.md",
     content: defaultSetupSkillMd(),
     missingCode: "missing-setup-skill",
@@ -233,7 +281,7 @@ async function addMaintenanceSkillFindings(repoRoot, config, findings) {
     description: "setup skill"
   });
   await addManagedSkillFileFinding(repoRoot, config, findings, {
-    skillName: "setup",
+    skillName: "atlas-setup",
     fileName: "customization.md",
     content: defaultCustomizationMd(),
     missingCode: "missing-customization-instructions",
@@ -241,7 +289,7 @@ async function addMaintenanceSkillFindings(repoRoot, config, findings) {
     description: "setup customization instructions"
   });
   await addManagedSkillFileFinding(repoRoot, config, findings, {
-    skillName: "review",
+    skillName: "atlas-review",
     fileName: "SKILL.md",
     content: defaultReviewSkillMd(),
     missingCode: "missing-review-skill",
@@ -412,7 +460,7 @@ async function addAliasFindings(repoRoot, config, findings) {
 
 async function addSemanticHealthFindings(repoRoot, config, findings) {
   if (config.setupState === "scaffolded") {
-    const setupSkillPath = normalizePath(path.join(resolveArtifactPath(config, "skills"), "setup", "SKILL.md"));
+    const setupSkillPath = normalizePath(path.join(resolveArtifactPath(config, "skills"), "atlas-setup", "SKILL.md"));
     findings.push(advisoryFinding("setup-pending", `Atlas setup has not been completed — read ${setupSkillPath} and follow it to finish setup`));
   }
 

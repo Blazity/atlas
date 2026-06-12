@@ -11,3 +11,7 @@ Installed configs silently freeze at install-time defaults: when templates evolv
 ## Flagged safety issues need an owner and a deadline
 
 `--yes` implied `--force` long after the overlap was first flagged. A flagged safety issue without an owner and a deadline is a note, not a fix.
+
+## Bare managed-skill names collide in shared namespaces
+
+Bare managed-skill names (`setup`, `review`) collided with other skills in shared agent namespaces — Atlas's `review` collided with Claude Code's built-in PR-review skill in practice. Managed skills are now prefixed (`atlas-setup`, `atlas-review`). Generic names in shared namespaces are collisions waiting to happen.

@@ -18,6 +18,28 @@ export function planTreeLines(plan, { color }) {
   });
 }
 
+// The outro's pasteable handoff prompt must stand out: prompt lines render in
+// brand orange, the surrounding guidance dims. Without color this is exactly
+// initNextStepText, byte for byte — the plain CLI path shares that text.
+export function renderNextStepText(root, { color }) {
+  const text = initNextStepText(root);
+  if (!color) {
+    return text;
+  }
+
+  const theme = makeTheme({ color });
+  const promptLines = new Set(setupHandoffPrompt(root).split("\n").map((line) => `  ${line}`));
+  return text
+    .split("\n")
+    .map((line) => {
+      if (line === "") {
+        return line;
+      }
+      return promptLines.has(line) ? theme.orange(line) : theme.dim(line);
+    })
+    .join("\n");
+}
+
 export function summarizeDoctorPass(findings) {
   const remaining = findings.filter((finding) => findingSeverity(finding) !== "advisory");
   const advisories = findings.filter((finding) => findingSeverity(finding) === "advisory");
@@ -60,7 +82,7 @@ export async function runInteractiveInit({ cwd, templateName = "standard", color
 
   if (plan.actions.length === 0) {
     note("Already up to date — nothing to write.", "atlas");
-    outro(initNextStepText(plan.root));
+    outro(renderNextStepText(plan.root, { color }));
     return 0;
   }
 
@@ -106,7 +128,7 @@ export async function runInteractiveInit({ cwd, templateName = "standard", color
     report(`[${finding.code}] ${finding.message}`);
   }
 
-  outro(initNextStepText(plan.root));
+  outro(renderNextStepText(plan.root, { color }));
 
   await offerAgentLaunch(ui, plan.root);
   return 0;

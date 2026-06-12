@@ -45,6 +45,13 @@ test("setup skill detects and confirms template moves instead of offering a name
   assert.match(skill, /pathAliases/);
 });
 
+test("setup skill requires depersonalized durable documentation", async () => {
+  const skill = await readFile(skillUrl, "utf8");
+  assert.match(skill, /Depersonalize everything durable/);
+  assert.match(skill, /not "<name> wanted memory"/);
+  assert.match(skill, /personal names, private schedules, internal-only references, and absolute local paths/);
+});
+
 test("setup skill budgets the interview and offers a defaults fast path", async () => {
   const skill = await readFile(skillUrl, "utf8");
   assert.match(skill, /accept all recommended defaults/);

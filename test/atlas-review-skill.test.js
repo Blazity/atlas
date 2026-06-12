@@ -31,6 +31,7 @@ test("review skill pins the verdict line, evidence standard, and artifact format
   assert.match(skill, /pass \/ conditional pass \/ fail/);
   assert.match(skill, /it worked once/);
   assert.match(skill, /not a completed review/);
+  assert.match(skill, /personal attributions, confidential or internal-only context/);
   for (const field of [
     "status",
     "preset",

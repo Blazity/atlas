@@ -137,7 +137,7 @@ Blocks when: the tool asks for approval on everything, slowing adoption, or on n
 - Define rollout scope and monitored expansion.
 - Define the decommissioning path if the tool stops being useful.
 
-Blocks when: a prototype is treated as production, or a production tool has no owner, monitoring, or rollback.
+Blocks when: a prototype is treated as production, or a production tool has no owner, monitoring, or rollback. Also blocks when artifacts or documentation that ship with the release contain personal attributions, confidential or internal-only context, or absolute local paths — durable records state needs and reasons, not individuals.
 
 ## Presets
 

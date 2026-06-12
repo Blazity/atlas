@@ -79,6 +79,7 @@ Resolve every path through the config from Phase 2 — never hardcode `.ai/`.
 - Fill `memory/product.md`, `memory/architecture.md`, and `memory/stack.md` with stable facts only.
 - Append `memory/lessons.md` only for proven non-obvious pitfalls.
 - Do not create new artifact roots. Use the config's `paths`.
+- Depersonalize everything durable: record needs, decisions, and reasons — never individuals or internal process. Write "memory was needed to persist context across runs", not "<name> wanted memory". Keep personal names, private schedules, internal-only references, and absolute local paths out of workspace artifacts.
 
 ## Phase 6 — Verify and Handover
 

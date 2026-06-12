@@ -17,7 +17,13 @@ export function agentManagedBlock(root = ".ai") {
     `${configReference} is the source of truth for AI artifact locations in this repository.`,
     "Before writing plans, research, decisions, ADRs, results, memory, vocabulary, or skill outputs, resolve the destination through `artifactRoot`, `paths`, and `pathAliases`.",
     `If an imported skill, template, or instruction mentions a different path, map it through ${configReference} before reading or writing files.`,
-    `Do not create new documentation roots unless ${configReference} explicitly allows them.`
+    `Do not create new documentation roots unless ${configReference} explicitly allows them.`,
+    "",
+    "## Atlas Documentation Rules",
+    "",
+    "Durable documentation records needs, decisions, and reasons — never individuals or internal process.",
+    'Write "memory was needed to persist context across runs", not "<name> wanted memory".',
+    "Keep personal names, private schedules, internal-only references, and absolute local paths out of workspace artifacts."
   ].join("\n");
 }
 

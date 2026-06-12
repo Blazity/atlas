@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { initNextStepText } from "../src/templates.js";
+import { agentManagedBlock, initNextStepText } from "../src/templates.js";
 
 test("initNextStepText leads with a self-locating pasteable agent prompt", () => {
   const text = initNextStepText();
@@ -12,6 +12,14 @@ test("initNextStepText leads with a self-locating pasteable agent prompt", () =>
   assert.match(text, /atlas doctor --fix/);
   assert.doesNotMatch(text, /Claude users can install the `atlas` plugin/);
   assert.doesNotMatch(text, /If you start from the skill first/);
+});
+
+test("agentManagedBlock carries the documentation depersonalization rules", () => {
+  const block = agentManagedBlock();
+  assert.match(block, /## Atlas Documentation Rules/);
+  assert.match(block, /needs, decisions, and reasons — never individuals or internal process/);
+  assert.match(block, /not "<name> wanted memory"/);
+  assert.match(block, /personal names, private schedules, internal-only references, and absolute local paths/);
 });
 
 test("initNextStepText derives every workspace path from the given root", () => {

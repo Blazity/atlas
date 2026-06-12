@@ -15,15 +15,13 @@
 
 ---
 
-# Atlas
+**Coding agents are only as good as the context your repository gives them.**
 
-**The agentic repo standard.**
-
-Atlas gives a git repository the structure that local coding agents need before they can work safely: shared instructions, repo memory, artifact paths, managed skills, and two kinds of gates — structural gates that keep the workspace sound and process gates that turn reviews into recorded verdicts.
+Atlas makes that context structured, durable, and machine-checked. One command scaffolds the shared instructions, repo memory, artifact paths, and managed skills agents need — plus two kinds of gates: structural gates that keep the workspace sound and process gates that turn reviews into recorded verdicts.
 
 The payoff compounds over time. You keep working normally, while Atlas turns useful project context into documentation that grows with the repo and makes each next agent run more effective.
 
-Run one command in the root of your project. Atlas creates the deterministic structure, then hands the rest to your local agent so it can inspect the repository and finish the setup with project-specific context.
+Atlas creates the deterministic structure, then hands the rest to your local agent so it can inspect the repository and finish the setup with project-specific context.
 
 ## Start Here
 

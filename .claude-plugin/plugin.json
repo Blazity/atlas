@@ -1,8 +1,8 @@
 {
   "name": "atlas",
   "displayName": "Atlas",
-  "version": "0.2.1",
-  "description": "Bootstrap and maintain a repo-owned .ai workspace through the published Atlas CLI.",
+  "version": "0.3.0",
+  "description": "Bootstrap and maintain a repo-owned Atlas workspace through the published Atlas CLI.",
   "author": {
     "name": "Blazity",
     "url": "https://github.com/Blazity"

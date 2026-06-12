@@ -1,5 +1,7 @@
 # Atlas CLI Redesign Implementation Plan
 
+> **Status:** Shipped in 0.2.x. The checkboxes below were checked retroactively on 2026-06-11, after the work had already shipped.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Give the `@blazity-atlas/core` CLI an animated, brand-colored interactive experience and fix three behavioral bugs in `atlas init`, while keeping a deterministic, testable non-interactive path.
@@ -51,7 +53,7 @@
 - Create: `src/plan.js`
 - Create: `test/plan.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```javascript
 // test/plan.test.js
@@ -114,12 +116,12 @@ test("buildPlan keeps the effective template of an existing config", async () =>
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --test test/plan.test.js`
 Expected: FAIL with `Cannot find module '../src/plan.js'`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```javascript
 // src/plan.js
@@ -159,12 +161,12 @@ export async function buildPlan(cwd, { templateName = "standard" } = {}) {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --test test/plan.test.js`
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/plan.js test/plan.test.js
@@ -179,7 +181,7 @@ git commit -m "feat(atlas): add init plan builder with action descriptions"
 - Modify: `src/output.js`
 - Create: `test/output.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```javascript
 // test/output.test.js
@@ -214,12 +216,12 @@ test("formatApplied dry-run uses the 'Would' tense", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --test test/output.test.js`
 Expected: FAIL with `formatApplied is not a function`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Append to `src/output.js` (keep the existing `formatFindings` / `exitCodeForFindings`):
 
@@ -243,12 +245,12 @@ export function formatApplied(actions, { dryRun = false } = {}) {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --test test/output.test.js`
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/output.js test/output.test.js
@@ -263,7 +265,7 @@ git commit -m "feat(atlas): add action-based init output renderer"
 - Modify: `src/templates.js`
 - Create: `test/next-step.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```javascript
 // test/next-step.test.js
@@ -285,12 +287,12 @@ test("initNextStepText leads with a single pasteable agent prompt", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --test test/next-step.test.js`
 Expected: FAIL (old `initNextStepText` still contains the removed phrases).
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Replace the `initNextStepText` function in `src/templates.js` with:
 
@@ -309,12 +311,12 @@ export function initNextStepText() {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --test test/next-step.test.js`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/templates.js test/next-step.test.js
@@ -329,7 +331,7 @@ git commit -m "fix(atlas): lead init next step with a pasteable agent prompt"
 - Modify: `src/init.js`
 - Modify: `test/doctor.test.js`
 
-- [ ] **Step 1: Update the existing init-output assertions (the failing test)**
+- [x] **Step 1: Update the existing init-output assertions (the failing test)**
 
 In `test/doctor.test.js`, in test `"init creates a clean harness and is idempotent"`:
 
@@ -355,12 +357,12 @@ with:
 
 (Leave lines 45, 46, 48 and the template tests at 78/92/93 unchanged — the new output keeps a `Template: <name>` line and the `/atlas:setup` reference.)
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `node --test test/doctor.test.js`
 Expected: FAIL — current `runInit` still prints `Applied changes:` and the old plugin line.
 
-- [ ] **Step 3: Rewrite `runInit`**
+- [x] **Step 3: Rewrite `runInit`**
 
 Replace the body of `src/init.js` with:
 
@@ -407,12 +409,12 @@ export async function runInit(options) {
 }
 ```
 
-- [ ] **Step 4: Run the full suite to verify it passes**
+- [x] **Step 4: Run the full suite to verify it passes**
 
 Run: `node --test`
 Expected: PASS — all tests (incl. the updated `doctor.test.js`, the unchanged template/invalid-config tests, and `pack-smoke`'s `/Atlas init/`).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/init.js test/doctor.test.js
@@ -427,7 +429,7 @@ git commit -m "fix(atlas): report init actions instead of diagnostic messages"
 - Create: `src/ui/runtime.js`
 - Create: `test/runtime.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```javascript
 // test/runtime.test.js
@@ -451,12 +453,12 @@ test("color follows TTY/FORCE_COLOR and is killed by NO_COLOR", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `node --test test/runtime.test.js`
 Expected: FAIL with `Cannot find module '../src/ui/runtime.js'`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```javascript
 // src/ui/runtime.js
@@ -469,12 +471,12 @@ export function detectMode({ stdoutIsTTY, stdinIsTTY, env = {}, yes = false, ci 
 }
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `node --test test/runtime.test.js`
 Expected: PASS (2 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/ui/runtime.js test/runtime.test.js
@@ -489,7 +491,7 @@ git commit -m "feat(atlas): add tty/color mode detection helper"
 - Modify: `package.json`
 - Modify: `package-lock.json` (generated)
 
-- [ ] **Step 1: Install the dependencies**
+- [x] **Step 1: Install the dependencies**
 
 Run:
 ```bash
@@ -497,7 +499,7 @@ npm install @clack/prompts@^0.7.0 gradient-string@^3.0.0
 ```
 Expected: `package.json` gains a `dependencies` block; `package-lock.json` is created/updated.
 
-- [ ] **Step 2: Write an import smoke test**
+- [x] **Step 2: Write an import smoke test**
 
 ```javascript
 // test/deps.test.js
@@ -514,17 +516,17 @@ test("ui dependencies import cleanly", async () => {
 });
 ```
 
-- [ ] **Step 3: Run to verify it passes**
+- [x] **Step 3: Run to verify it passes**
 
 Run: `node --test test/deps.test.js`
 Expected: PASS.
 
-- [ ] **Step 4: Verify the pack still excludes dev noise**
+- [x] **Step 4: Verify the pack still excludes dev noise**
 
 Run: `node --test test/pack-smoke.test.js`
 Expected: PASS — `files` allowlist (`bin/`, `src/`, `skills/`, `README.md`, `LICENSE`) already excludes `node_modules`/`test`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add package.json package-lock.json test/deps.test.js
@@ -539,7 +541,7 @@ git commit -m "build(atlas): add @clack/prompts and gradient-string deps"
 - Create: `src/ui/theme.js`
 - Create: `test/theme.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```javascript
 // test/theme.test.js
@@ -567,12 +569,12 @@ test("color on wraps text in a 24-bit escape and resets", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `node --test test/theme.test.js`
 Expected: FAIL with `Cannot find module '../src/ui/theme.js'`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```javascript
 // src/ui/theme.js
@@ -602,12 +604,12 @@ export function makeTheme({ color }) {
 }
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `node --test test/theme.test.js`
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/ui/theme.js test/theme.test.js
@@ -622,7 +624,7 @@ git commit -m "feat(atlas): add brand color theme helpers"
 - Create: `src/ui/logo.js`
 - Create: `test/logo.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```javascript
 // test/logo.test.js
@@ -648,12 +650,12 @@ test("color on applies ANSI escapes to every row", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `node --test test/logo.test.js`
 Expected: FAIL with `Cannot find module '../src/ui/logo.js'`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```javascript
 // src/ui/logo.js
@@ -689,7 +691,7 @@ export async function animateLogo(stream, { color }) {
 }
 ```
 
-- [ ] **Step 4: Add the tiny sleep helper used above**
+- [x] **Step 4: Add the tiny sleep helper used above**
 
 ```javascript
 // src/ui/sleep.js
@@ -698,12 +700,12 @@ export function atlasSleep(ms) {
 }
 ```
 
-- [ ] **Step 5: Run to verify it passes**
+- [x] **Step 5: Run to verify it passes**
 
 Run: `node --test test/logo.test.js`
 Expected: PASS (3 tests).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/ui/logo.js src/ui/sleep.js test/logo.test.js
@@ -719,7 +721,7 @@ git commit -m "feat(atlas): add gradient ATLAS logo renderer"
 - Modify: `src/cli.js`
 - Create: `test/flow.test.js`
 
-- [ ] **Step 1: Write the failing test (pure tree helper + dispatch)**
+- [x] **Step 1: Write the failing test (pure tree helper + dispatch)**
 
 ```javascript
 // test/flow.test.js
@@ -748,12 +750,12 @@ test("planTreeLines renders one '<verb>  <target>' line per action", async () =>
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `node --test test/flow.test.js`
 Expected: FAIL with `Cannot find module '../src/ui/flow.js'`.
 
-- [ ] **Step 3: Implement the interactive flow**
+- [x] **Step 3: Implement the interactive flow**
 
 ```javascript
 // src/ui/flow.js
@@ -847,7 +849,7 @@ import { initNextStepText } from "../templates.js";
 ```
 (Replace the placeholder `applyFixes` import line accordingly.)
 
-- [ ] **Step 4: Wire `main()` to dispatch to the interactive flow**
+- [x] **Step 4: Wire `main()` to dispatch to the interactive flow**
 
 In `src/cli.js`, add imports at the top:
 ```javascript
@@ -895,21 +897,21 @@ export async function main() {
 }
 ```
 
-- [ ] **Step 5: Run to verify the helper test passes and the suite stays green**
+- [x] **Step 5: Run to verify the helper test passes and the suite stays green**
 
 Run: `node --test`
 Expected: PASS — `flow.test.js` passes; `runCli`-based tests are unaffected because they never go through `main()`/TTY.
 
-- [ ] **Step 6: Manual visual check (documented, not automated)**
+- [x] **Step 6: Manual visual check (documented, not automated)**
 
 Run in a real terminal inside a throwaway git repo:
 ```bash
 mkdir /tmp/atlas-demo && cd /tmp/atlas-demo && git init -q
-node /Users/blazity/dev/atlas/.claude/worktrees/piped-jingling-nebula/bin/atlas.js init
+node ./bin/atlas.js init
 ```
 Expected: gradient ATLAS logo animates in; clack intro/spinner/confirm appear; choosing "Yes" writes `.ai/`; outro shows the copy-paste prompt. `Ctrl-C` at a prompt prints "Cancelled. Nothing written." Re-run with `NO_COLOR=1` to confirm plain readable output, and pipe (`| cat`) to confirm the non-interactive plain path still runs.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/ui/flow.js src/cli.js test/flow.test.js
@@ -925,7 +927,7 @@ git commit -m "feat(atlas): add interactive init flow with confirm gate"
 - Modify: `src/cli.js`
 - Create: `test/ui-doctor.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```javascript
 // test/ui-doctor.test.js
@@ -947,12 +949,12 @@ test("color on paints the clean status green without altering structure", () => 
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `node --test test/ui-doctor.test.js`
 Expected: FAIL with `Cannot find module '../src/ui/doctor.js'`.
 
-- [ ] **Step 3: Implement the colorizer + interactive entry**
+- [x] **Step 3: Implement the colorizer + interactive entry**
 
 ```javascript
 // src/ui/doctor.js
@@ -988,7 +990,7 @@ export async function runInteractiveDoctor({ argv, color }) {
 
 (`animateLogo` import is available for future use; the compact mark above keeps `doctor` fast. Remove the unused import if your linter flags it.)
 
-- [ ] **Step 4: Wire `main()` for interactive doctor**
+- [x] **Step 4: Wire `main()` for interactive doctor**
 
 In `src/cli.js`, add `import { runInteractiveDoctor } from "./ui/doctor.js";` and, in `main()` right after the interactive `init` branch, add:
 ```javascript
@@ -998,12 +1000,12 @@ In `src/cli.js`, add `import { runInteractiveDoctor } from "./ui/doctor.js";` an
     }
 ```
 
-- [ ] **Step 5: Run to verify it passes**
+- [x] **Step 5: Run to verify it passes**
 
 Run: `node --test`
 Expected: PASS — `ui-doctor.test.js` passes; `runCli` doctor output unchanged for tests.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/ui/doctor.js src/cli.js test/ui-doctor.test.js
@@ -1018,7 +1020,7 @@ git commit -m "feat(atlas): colorize interactive doctor output"
 - Modify: `skills/setup/SKILL.md`
 - Create: `test/setup-skill.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```javascript
 // test/setup-skill.test.js
@@ -1038,12 +1040,12 @@ test("setup skill instructs the agent to choose a template after inspection", as
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `node --test test/setup-skill.test.js`
 Expected: FAIL — no `## Template Selection` section yet.
 
-- [ ] **Step 3: Add the section**
+- [x] **Step 3: Add the section**
 
 In `skills/setup/SKILL.md`, insert this section immediately after the `## Required Grounding` section and before `## Customization Gate`:
 
@@ -1065,12 +1067,12 @@ available templates are `standard, app, library, monorepo, agency` (the CLI's
   only when it exits clean.
 ```
 
-- [ ] **Step 4: Run to verify it passes and nothing regressed**
+- [x] **Step 4: Run to verify it passes and nothing regressed**
 
 Run: `node --test`
 Expected: PASS — `setup-skill.test.js` passes; `pack-smoke.test.js` and `doctor.test.js`'s skill-content assertions (`name: setup`, `Bootstrap / Update Harness`, the `npx` commands, `dirty worktree`, `manual conflicts`, `Refresh`, `customization.md`) still match.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/setup/SKILL.md test/setup-skill.test.js
@@ -1084,7 +1086,7 @@ git commit -m "feat(atlas): teach setup skill to choose the template"
 **Files:**
 - Modify: `src/cli.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `test/doctor.test.js`:
 ```javascript
@@ -1097,12 +1099,12 @@ test("init accepts the --ci flag and stays non-interactive", async () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `node --test test/doctor.test.js`
 Expected: FAIL with `Unknown option: --ci` (exit 2).
 
-- [ ] **Step 3: Allow `--ci` and clarify help**
+- [x] **Step 3: Allow `--ci` and clarify help**
 
 In `src/cli.js`, in the `init` branch, change the allowed-flags list:
 ```javascript
@@ -1119,12 +1121,12 @@ Templates:
   (usually chosen for you by the setup skill after it inspects the repo)
 ```
 
-- [ ] **Step 4: Run the full suite**
+- [x] **Step 4: Run the full suite**
 
 Run: `node --test`
 Expected: PASS — all suites green, including the new `--ci` test.
 
-- [ ] **Step 5: Final manual verification matrix**
+- [x] **Step 5: Final manual verification matrix**
 
 Run each and confirm:
 ```bash
@@ -1141,7 +1143,7 @@ node <repo>/bin/atlas.js doctor ; node <repo>/bin/atlas.js doctor | cat
 ```
 Expected: animated/branded interactively; clean action-based plain output otherwise; no `is missing` under applied changes anywhere; copy-paste prompt as the lead next step.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/cli.js test/doctor.test.js

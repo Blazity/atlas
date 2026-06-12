@@ -1,6 +1,8 @@
 import path from "node:path";
 
 const requiredPaths = ["language", "memory", "plans", "research", "decisions", "adrs", "results", "skills"];
+const setupStates = ["scaffolded", "configured"];
+const agentSurfaceNames = ["claude", "agents", "cursor"];
 const basePathAliases = {
   "docs/superpowers/plans": "plans",
   "docs/superpowers/specs": "research",
@@ -45,13 +47,15 @@ export function createDefaultConfig() {
   return createConfigForTemplate("standard");
 }
 
-export function createConfigForTemplate(templateName = "standard") {
+export function createConfigForTemplate(templateName = "standard", root = ".ai") {
   const template = getTemplateDefinition(templateName);
 
   return {
     schemaVersion: 1,
     template: template.name,
-    artifactRoot: ".ai",
+    setupState: "scaffolded",
+    artifactRoot: root,
+    agentSurfaces: [...agentSurfaceNames],
     paths: {
       language: "LANGUAGE.md",
       memory: "memory",
@@ -96,6 +100,23 @@ export function validateConfig(config) {
     errors.push(`template must be one of: ${getTemplateNames().join(", ")}`);
   }
 
+  if (config.setupState !== undefined && !setupStates.includes(config.setupState)) {
+    errors.push(`setupState must be one of: ${setupStates.join(", ")}`);
+  }
+
+  if (config.agentSurfaces !== undefined) {
+    if (!Array.isArray(config.agentSurfaces)) {
+      errors.push(`agentSurfaces must be an array drawn from: ${agentSurfaceNames.join(", ")}`);
+    } else {
+      for (const surface of config.agentSurfaces) {
+        if (!agentSurfaceNames.includes(surface)) {
+          errors.push(`agentSurfaces must only contain: ${agentSurfaceNames.join(", ")}`);
+          break;
+        }
+      }
+    }
+  }
+
   if (typeof config.artifactRoot !== "string" || config.artifactRoot.trim() === "") {
     errors.push("artifactRoot must be a non-empty string");
   } else if (!path.isAbsolute(config.artifactRoot) && pathEscapesRoot(config.artifactRoot)) {
@@ -136,6 +157,20 @@ export function validateConfig(config) {
   return { valid: errors.length === 0, errors };
 }
 
+export function workspaceRootError(value) {
+  if (typeof value !== "string" || value.trim() === "") {
+    return "must not be empty";
+  }
+  const trimmed = value.trim();
+  if (path.isAbsolute(trimmed)) {
+    return "must be a repo-relative path, not absolute";
+  }
+  if (pathEscapesRoot(trimmed)) {
+    return "must not escape the repository root";
+  }
+  return null;
+}
+
 export function resolveArtifactPath(config, keyOrRelativePath) {
   const configuredValue = config.paths?.[keyOrRelativePath] ?? keyOrRelativePath;
   if (path.isAbsolute(configuredValue)) {
@@ -171,8 +206,8 @@ export function normalizePath(value) {
   return value.replaceAll(path.sep, "/").replace(/\/+$/u, "") || ".";
 }
 
-export function configPath(repoRoot) {
-  return path.join(repoRoot, ".ai", "config.json");
+export function configPath(repoRoot, root = ".ai") {
+  return path.join(repoRoot, root, "config.json");
 }
 
 function pathEscapesRoot(value) {

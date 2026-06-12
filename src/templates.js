@@ -1,29 +1,23 @@
 import { readFileSync } from "node:fs";
+import path from "node:path";
 
-import { createConfigForTemplate } from "./config.js";
+import { createConfigForTemplate, normalizePath } from "./config.js";
 
 export const managedBlockId = "artifact-paths";
 
-export function defaultConfigJson(templateName = "standard") {
-  return `${JSON.stringify(createConfigForTemplate(templateName), null, 2)}\n`;
+export function defaultConfigJson(templateName = "standard", root = ".ai") {
+  return `${JSON.stringify(createConfigForTemplate(templateName, root), null, 2)}\n`;
 }
 
-export function agentManagedBlock() {
+export function agentManagedBlock(root = ".ai") {
+  const configReference = `\`${normalizePath(path.join(root, "config.json"))}\``;
   return [
     "## Atlas Artifact Paths",
     "",
-    "`.ai/config.json` is the source of truth for AI artifact locations in this repository.",
+    `${configReference} is the source of truth for AI artifact locations in this repository.`,
     "Before writing plans, research, decisions, ADRs, results, memory, vocabulary, or skill outputs, resolve the destination through `artifactRoot`, `paths`, and `pathAliases`.",
-    "If an imported skill, template, or instruction mentions a different path, map it through `.ai/config.json` before reading or writing files.",
-    "Do not create new documentation roots unless `.ai/config.json` explicitly allows them."
-  ].join("\n");
-}
-
-export function defaultAgentsMd() {
-  return [
-    "# Project AI Instructions",
-    "",
-    agentManagedBlock()
+    `If an imported skill, template, or instruction mentions a different path, map it through ${configReference} before reading or writing files.`,
+    `Do not create new documentation roots unless ${configReference} explicitly allows them.`
   ].join("\n");
 }
 
@@ -54,22 +48,41 @@ export function defaultMemoryReadme() {
 }
 
 export function defaultSetupSkillMd() {
-  return readFileSync(new URL("../skills/setup/SKILL.md", import.meta.url), "utf8").replace(/\n$/u, "");
+  return readPackagedSkillFile("atlas-setup/SKILL.md");
 }
 
 export function defaultCustomizationMd() {
-  return readFileSync(new URL("../skills/setup/customization.md", import.meta.url), "utf8").replace(/\n$/u, "");
+  return readPackagedSkillFile("atlas-setup/customization.md");
 }
 
-export function initNextStepText() {
+export function defaultReviewSkillMd() {
+  return readPackagedSkillFile("atlas-review/SKILL.md");
+}
+
+function readPackagedSkillFile(relativePath) {
+  return readFileSync(new URL(`../skills/${relativePath}`, import.meta.url), "utf8").replace(/\n$/u, "");
+}
+
+export function setupHandoffPrompt(root = ".ai") {
+  const setupSkillPath = normalizePath(path.join(root, "skills", "atlas-setup", "SKILL.md"));
+  return [
+    `Read ${setupSkillPath} and follow it to finish the Atlas setup on`,
+    "this repository: inspect the repo, confirm or refine the template,",
+    "and fill AGENTS.md and the workspace memory files."
+  ].join("\n");
+}
+
+export function initNextStepText(root = ".ai") {
+  const indentedPrompt = setupHandoffPrompt(root)
+    .split("\n")
+    .map((line) => `  ${line}`)
+    .join("\n");
   return [
     "Next step — paste this to your coding agent:",
     "",
-    "  Finish the Atlas setup on this repository: use the `setup` skill to",
-    "  inspect the repo, confirm or refine the template, and fill AGENTS.md",
-    "  and the .ai/ memory files.",
+    indentedPrompt,
     "",
-    "Claude Code: run /atlas:setup",
+    "Claude Code: run /atlas:atlas-setup",
     "Repair drift later: atlas doctor --fix"
   ].join("\n");
 }

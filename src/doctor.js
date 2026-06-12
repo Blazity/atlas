@@ -15,43 +15,79 @@ import { fileExists, readTextIfExists, repoPath } from "./repo.js";
 import {
   agentManagedBlock,
   defaultCustomizationMd,
-  defaultAgentsMd,
   defaultClaudeMd,
   defaultConfigJson,
   defaultLanguageMd,
+  defaultReviewSkillMd,
   defaultSetupSkillMd,
   defaultMemoryReadme,
   managedBlockId
 } from "./templates.js";
 
-const skillLinkPaths = [".claude/skills", ".agents/skills", ".cursor/skills"];
+const defaultRoot = ".ai";
+const rootPointerFile = ".atlas";
+const agentSurfaceLinks = {
+  claude: ".claude/skills",
+  agents: ".agents/skills",
+  cursor: ".cursor/skills"
+};
+const gitkeepDirectoryKeys = ["plans", "research", "results", "adrs"];
+
+export async function discoverWorkspaceRoot(repoRoot) {
+  if (await fileExists(configPath(repoRoot))) {
+    return { root: defaultRoot, source: "default" };
+  }
+
+  const pointer = await readTextIfExists(repoPath(repoRoot, rootPointerFile));
+  if (pointer !== null) {
+    return { root: normalizePath(pointer.split("\n")[0].trim()), source: "pointer" };
+  }
+
+  return { root: defaultRoot, source: "default" };
+}
 
 export async function loadConfig(repoRoot, options = {}) {
-  const filePath = configPath(repoRoot);
+  const root = options.root ?? (await discoverWorkspaceRoot(repoRoot)).root;
+  const filePath = configPath(repoRoot, root);
   if (!(await fileExists(filePath))) {
-    return { config: createConfigForTemplate(options.templateName ?? "standard"), exists: false, errors: [] };
+    return { config: createConfigForTemplate(options.templateName ?? "standard", root), exists: false, errors: [], root };
   }
 
   try {
     const config = JSON.parse(await readFile(filePath, "utf8"));
     const validation = validateConfig(config);
-    return { config, exists: true, errors: validation.errors };
+    return { config, exists: true, errors: validation.errors, root };
   } catch (error) {
     return {
-      config: createConfigForTemplate(options.templateName ?? "standard"),
+      config: createConfigForTemplate(options.templateName ?? "standard", root),
       exists: true,
-      errors: [`config is not valid JSON: ${error.message}`]
+      errors: [`config is not valid JSON: ${error.message}`],
+      root
     };
   }
 }
 
 export async function collectDoctorFindings(repoRoot, options = {}) {
   const findings = [];
-  const loaded = await loadConfig(repoRoot, options);
+  const discovered = await discoverWorkspaceRoot(repoRoot);
+  const root = options.root ?? discovered.root;
+  const rootIsFromPointer = options.root === undefined && discovered.source === "pointer";
+
+  if (rootIsFromPointer && rootEscapesRepo(root)) {
+    findings.push(manualFinding("broken-root-pointer", `${rootPointerFile} points to ${root}, which escapes the repository root`));
+    return findings;
+  }
+
+  const loaded = await loadConfig(repoRoot, { ...options, root });
   const config = loaded.config;
+  const configRelativePath = normalizePath(path.join(root, "config.json"));
 
   if (!loaded.exists) {
-    findings.push(fixableFinding("missing-config", ".ai/config.json is missing", writeConfigAction(repoRoot, options.templateName)));
+    if (rootIsFromPointer) {
+      findings.push(manualFinding("broken-root-pointer", `${rootPointerFile} points to ${root}, but ${configRelativePath} is missing`));
+      return findings;
+    }
+    findings.push(fixableFinding("missing-config", `${configRelativePath} is missing`, writeConfigAction(repoRoot, options.templateName, root)));
   }
 
   for (const error of loaded.errors) {
@@ -62,12 +98,19 @@ export async function collectDoctorFindings(repoRoot, options = {}) {
     return findings;
   }
 
+  await addRootPointerFindings(repoRoot, root, findings);
   await addRequiredArtifactFindings(repoRoot, config, findings);
+  await addGitkeepFindings(repoRoot, config, findings);
+  // Legacy moves must precede the managed-skill findings: applyFixes runs in
+  // array order, so a legacy file is relocated before any managed write lands
+  // on the new path (a write-first order would trip the move overwrite guard).
+  await addLegacySkillMigrationFindings(repoRoot, config, findings);
   await addMaintenanceSkillFindings(repoRoot, config, findings);
-  await addManagedFileFindings(repoRoot, findings);
+  await addManagedFileFindings(repoRoot, root, findings);
   await addSkillLinkFindings(repoRoot, config, findings);
   await addPlaceholderFindings(repoRoot, config, findings);
   await addAliasFindings(repoRoot, config, findings);
+  await addSemanticHealthFindings(repoRoot, config, findings);
 
   return findings;
 }
@@ -80,14 +123,42 @@ export async function applyFixes(findings) {
   }
 }
 
+export function findingSeverity(finding) {
+  return finding.severity ?? (finding.fixable ? "fixable" : "manual");
+}
+
 export function classifyFindings(findings) {
-  if (findings.length === 0) {
-    return "clean";
-  }
-  if (findings.some((finding) => !finding.fixable)) {
+  if (findings.some((finding) => findingSeverity(finding) === "manual")) {
     return "manual";
   }
-  return "fixable";
+  if (findings.some((finding) => findingSeverity(finding) === "fixable")) {
+    return "fixable";
+  }
+  return "clean";
+}
+
+async function addRootPointerFindings(repoRoot, root, findings) {
+  if (normalizePath(root) === defaultRoot) {
+    return;
+  }
+
+  const absolutePath = repoPath(repoRoot, rootPointerFile);
+  const expectedContent = `${normalizePath(root)}\n`;
+  const currentContent = await readTextIfExists(absolutePath);
+  if (currentContent === expectedContent) {
+    return;
+  }
+
+  const code = currentContent === null ? "missing-root-pointer" : "wrong-root-pointer";
+  const message = currentContent === null
+    ? `${rootPointerFile} root pointer is missing`
+    : `${rootPointerFile} points to ${currentContent.split("\n")[0].trim()}, expected ${normalizePath(root)}`;
+  findings.push(fixableFinding(code, message, {
+    type: "write",
+    relativePath: rootPointerFile,
+    absolutePath,
+    content: expectedContent
+  }));
 }
 
 async function addRequiredArtifactFindings(repoRoot, config, findings) {
@@ -134,8 +205,75 @@ async function addRequiredArtifactFindings(repoRoot, config, findings) {
   }
 }
 
+async function addGitkeepFindings(repoRoot, config, findings) {
+  for (const key of gitkeepDirectoryKeys) {
+    const relativePath = resolveArtifactPath(config, key);
+    const absolutePath = repoPath(repoRoot, relativePath);
+    const kind = await getPathKind(absolutePath);
+    if (kind !== "missing" && kind !== "directory") {
+      continue;
+    }
+    if (kind === "directory" && (await readdir(absolutePath)).length > 0) {
+      continue;
+    }
+
+    const gitkeepPath = normalizePath(path.join(relativePath, ".gitkeep"));
+    findings.push(fixableFinding("missing-gitkeep", `${gitkeepPath} is missing`, {
+      type: "write",
+      relativePath: gitkeepPath,
+      absolutePath: repoPath(repoRoot, gitkeepPath),
+      content: ""
+    }));
+  }
+}
+
+// Managed skills lived at skills/setup and skills/review before the rename to
+// the collision-safe prefixed directories; doctor migrates old installs.
+const legacySkillMigrations = [
+  { legacyName: "setup", currentName: "atlas-setup", fileNames: ["SKILL.md", "customization.md"] },
+  { legacyName: "review", currentName: "atlas-review", fileNames: ["SKILL.md"] }
+];
+
+async function addLegacySkillMigrationFindings(repoRoot, config, findings) {
+  const skillsRoot = resolveArtifactPath(config, "skills");
+  for (const migration of legacySkillMigrations) {
+    let currentBlocksMove = false;
+    for (const fileName of migration.fileNames) {
+      const from = normalizePath(path.join(skillsRoot, migration.legacyName, fileName));
+      const fromAbsolutePath = repoPath(repoRoot, from);
+      if ((await getPathKind(fromAbsolutePath)) !== "file") {
+        continue;
+      }
+
+      const to = normalizePath(path.join(skillsRoot, migration.currentName, fileName));
+      const toAbsolutePath = repoPath(repoRoot, to);
+      if (await fileExists(toAbsolutePath)) {
+        currentBlocksMove = true;
+      } else {
+        findings.push(fixableFinding("misplaced-legacy-skill", `${from} should move to ${to}`, {
+          type: "move",
+          from,
+          to,
+          fromAbsolutePath,
+          toAbsolutePath
+        }));
+      }
+    }
+
+    if (currentBlocksMove) {
+      const legacyPath = normalizePath(path.join(skillsRoot, migration.legacyName));
+      const currentPath = normalizePath(path.join(skillsRoot, migration.currentName));
+      findings.push(advisoryFinding(
+        "legacy-skill-directory",
+        `${legacyPath} is superseded by ${currentPath} — delete the legacy directory manually`
+      ));
+    }
+  }
+}
+
 async function addMaintenanceSkillFindings(repoRoot, config, findings) {
   await addManagedSkillFileFinding(repoRoot, config, findings, {
+    skillName: "atlas-setup",
     fileName: "SKILL.md",
     content: defaultSetupSkillMd(),
     missingCode: "missing-setup-skill",
@@ -143,16 +281,25 @@ async function addMaintenanceSkillFindings(repoRoot, config, findings) {
     description: "setup skill"
   });
   await addManagedSkillFileFinding(repoRoot, config, findings, {
+    skillName: "atlas-setup",
     fileName: "customization.md",
     content: defaultCustomizationMd(),
     missingCode: "missing-customization-instructions",
     staleCode: "stale-customization-instructions",
     description: "setup customization instructions"
   });
+  await addManagedSkillFileFinding(repoRoot, config, findings, {
+    skillName: "atlas-review",
+    fileName: "SKILL.md",
+    content: defaultReviewSkillMd(),
+    missingCode: "missing-review-skill",
+    staleCode: "stale-review-skill",
+    description: "review skill"
+  });
 }
 
 async function addManagedSkillFileFinding(repoRoot, config, findings, options) {
-  const relativePath = path.join(resolveArtifactPath(config, "skills"), "setup", options.fileName);
+  const relativePath = path.join(resolveArtifactPath(config, "skills"), options.skillName, options.fileName);
   const absolutePath = repoPath(repoRoot, relativePath);
   const expectedContent = `${options.content}\n`;
   const kind = await getPathKind(absolutePath);
@@ -183,7 +330,7 @@ async function addManagedSkillFileFinding(repoRoot, config, findings, options) {
   }
 }
 
-async function addManagedFileFindings(repoRoot, findings) {
+async function addManagedFileFindings(repoRoot, root, findings) {
   const agentsPath = repoPath(repoRoot, "AGENTS.md");
   const currentAgents = await readTextIfExists(agentsPath);
   if (currentAgents !== null) {
@@ -199,8 +346,8 @@ async function addManagedFileFindings(repoRoot, findings) {
   }
 
   const nextAgents = currentAgents === null
-    ? applyManagedBlock("# Project AI Instructions\n", managedBlockId, agentManagedBlock())
-    : applyManagedBlock(currentAgents, managedBlockId, agentManagedBlock());
+    ? applyManagedBlock("# Project AI Instructions\n", managedBlockId, agentManagedBlock(root))
+    : applyManagedBlock(currentAgents, managedBlockId, agentManagedBlock(root));
 
   if (currentAgents !== nextAgents) {
     findings.push(fixableFinding("missing-managed-block", "AGENTS.md is missing the Atlas managed artifact-path block", {
@@ -228,7 +375,9 @@ async function addManagedFileFindings(repoRoot, findings) {
 
 async function addSkillLinkFindings(repoRoot, config, findings) {
   const skillsPath = repoPath(repoRoot, resolveArtifactPath(config, "skills"));
-  for (const relativePath of skillLinkPaths) {
+  const surfaces = config.agentSurfaces ?? Object.keys(agentSurfaceLinks);
+  for (const surface of surfaces) {
+    const relativePath = agentSurfaceLinks[surface];
     const absolutePath = repoPath(repoRoot, relativePath);
     const target = normalizePath(path.relative(path.dirname(absolutePath), skillsPath));
     const kind = await getPathKind(absolutePath);
@@ -264,7 +413,7 @@ async function addPlaceholderFindings(repoRoot, config, findings) {
   for (const relativePath of ["AGENTS.md", resolveArtifactPath(config, "language")]) {
     const content = await readTextIfExists(repoPath(repoRoot, relativePath));
     if (content && (content.includes("{{") || content.includes("<!-- TODO"))) {
-      findings.push(manualFinding("unresolved-placeholder", `${relativePath} still contains scaffold placeholders`));
+      findings.push(advisoryFinding("unresolved-placeholder", `${relativePath} still contains scaffold placeholders`));
     }
   }
 }
@@ -309,21 +458,64 @@ async function addAliasFindings(repoRoot, config, findings) {
   }
 }
 
-function writeConfigAction(repoRoot, templateName = "standard") {
+async function addSemanticHealthFindings(repoRoot, config, findings) {
+  if (config.setupState === "scaffolded") {
+    const setupSkillPath = normalizePath(path.join(resolveArtifactPath(config, "skills"), "atlas-setup", "SKILL.md"));
+    findings.push(advisoryFinding("setup-pending", `Atlas setup has not been completed — read ${setupSkillPath} and follow it to finish setup`));
+  }
+
+  const languagePath = resolveArtifactPath(config, "language");
+  const languageContent = await readTextIfExists(repoPath(repoRoot, languagePath));
+  if (languageContent !== null && countVocabularyDataRows(languageContent) === 0) {
+    findings.push(advisoryFinding("empty-language", `${languagePath} has no vocabulary entries yet`));
+  }
+
+  const memoryPath = resolveArtifactPath(config, "memory");
+  const memoryAbsolutePath = repoPath(repoRoot, memoryPath);
+  if ((await getPathKind(memoryAbsolutePath)) === "directory") {
+    const entries = await readdir(memoryAbsolutePath);
+    if (entries.length === 1 && entries[0] === "README.md") {
+      findings.push(advisoryFinding("empty-memory", `${memoryPath} contains only README.md — no memory captured yet`));
+    }
+  }
+}
+
+function countVocabularyDataRows(content) {
+  const lines = content.split("\n").map((line) => line.trim());
+  const separatorIndex = lines.findIndex((line) => /^\|(\s*:?-{3,}:?\s*\|)+$/.test(line));
+  if (separatorIndex === -1) {
+    return 0;
+  }
+  return lines.slice(separatorIndex + 1).filter((line) => line.startsWith("|")).length;
+}
+
+function rootEscapesRepo(root) {
+  if (path.isAbsolute(root)) {
+    return true;
+  }
+  const normalized = path.posix.normalize(normalizePath(root));
+  return normalized === ".." || normalized.startsWith("../");
+}
+
+function writeConfigAction(repoRoot, templateName = "standard", root = defaultRoot) {
   return {
     type: "write",
-    relativePath: ".ai/config.json",
-    absolutePath: configPath(repoRoot),
-    content: defaultConfigJson(templateName)
+    relativePath: normalizePath(path.join(root, "config.json")),
+    absolutePath: configPath(repoRoot, root),
+    content: defaultConfigJson(templateName, root)
   };
 }
 
 function fixableFinding(code, message, action) {
-  return { code, message, fixable: true, action };
+  return { code, message, severity: "fixable", fixable: true, action };
 }
 
 function manualFinding(code, message) {
-  return { code, message, fixable: false };
+  return { code, message, severity: "manual", fixable: false };
+}
+
+function advisoryFinding(code, message) {
+  return { code, message, severity: "advisory", fixable: false };
 }
 
 async function getPathKind(absolutePath) {

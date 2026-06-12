@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "template": "library",
+  "setupState": "configured",
+  "artifactRoot": ".ai",
+  "agentSurfaces": [
+    "claude",
+    "agents",
+    "cursor"
+  ],
+  "paths": {
+    "language": "LANGUAGE.md",
+    "memory": "memory",
+    "plans": "plans",
+    "research": "research",
+    "decisions": "decisions",
+    "adrs": "decisions/adrs",
+    "results": "results",
+    "skills": "skills"
+  },
+  "pathAliases": {
+    "docs/superpowers/plans": "plans",
+    "docs/superpowers/specs": "research",
+    "docs/adrs": "decisions/adrs",
+    "docs/specs": "research",
+    "docs/api": "research",
+    "docs/releases": "decisions",
+    "docs/changelog": "results"
+  }
+}

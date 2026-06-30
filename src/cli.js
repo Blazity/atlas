@@ -1,11 +1,12 @@
-import { collectDoctorFindings, applyFixes } from "./doctor.js";
+import { collectDoctorFindings, applyFixes, loadConfig } from "./doctor.js";
 import { runInit } from "./init.js";
 import { getTemplateNames, workspaceRootError } from "./config.js";
+import { analyzeContextSizes, buildContextSizeHandoffPrompt } from "./context-size.js";
 import { exitCodeForFindings, formatFindings } from "./output.js";
 import { gitStatus, isGitRepo } from "./repo.js";
 import { detectMode } from "./ui/runtime.js";
 import { runInteractiveInit } from "./ui/flow.js";
-import { colorizeDoctorOutput, doctorMark } from "./ui/doctor.js";
+import { colorizeDoctorOutput, doctorMark, offerContextSizeHandoff } from "./ui/doctor.js";
 
 export async function runCli(argv = process.argv.slice(2), options = {}) {
   const cwd = options.cwd ?? process.cwd();
@@ -43,9 +44,15 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
   }
 
   if (parsed.command === "doctor") {
-    const validation = validateFlags(parsed.flags, ["fix", "force"]);
+    const validation = validateFlags(parsed.flags, ["fix", "force", "handoff"]);
     if (validation) {
       return { exitCode: 2, stdout: helpText(), stderr: `${validation}\n` };
+    }
+    if (parsed.flags.has("fix") && parsed.flags.has("handoff")) {
+      return { exitCode: 2, stdout: helpText(), stderr: "Cannot combine --fix and --handoff.\n" };
+    }
+    if (parsed.flags.has("handoff") && parsed.flags.get("handoff") !== "context-size") {
+      return { exitCode: 2, stdout: helpText(), stderr: "Unsupported handoff topic: use --handoff context-size.\n" };
     }
 
     if (!(await isGitRepo(cwd))) {
@@ -53,6 +60,16 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
     }
 
     const findings = await collectDoctorFindings(cwd);
+    const contextSizeHandoffPrompt = canBuildContextSizePrompt(findings) ? await contextSizePromptFor(cwd) : null;
+    if (parsed.flags.has("handoff")) {
+      return {
+        exitCode: exitCodeForFindings(findings),
+        stdout: contextSizeHandoffPrompt
+          ? `Atlas doctor handoff\n\n${contextSizeHandoffPrompt}\n`
+          : "Atlas doctor handoff\n\nNo context-size advisory found. No handoff needed.\n",
+        stderr: ""
+      };
+    }
     if (parsed.flags.has("fix")) {
       const manual = findings.filter((finding) => finding.severity === "manual");
       if (manual.length > 0) {
@@ -73,14 +90,16 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
       return {
         exitCode: 0,
         stdout: `Atlas doctor --fix\n${formatFindings(findings, { emptyMessage: "No issues found.", fixableHeading: "Applied fixes:" })}`,
-        stderr: ""
+        stderr: "",
+        contextSizeHandoffPrompt
       };
     }
 
     return {
       exitCode: exitCodeForFindings(findings),
       stdout: `Atlas doctor\n${formatFindings(findings)}`,
-      stderr: ""
+      stderr: "",
+      contextSizeHandoffPrompt
     };
   }
 
@@ -135,6 +154,9 @@ export async function main() {
       if (doctorResult.stderr) {
         process.stderr.write(doctorResult.stderr);
       }
+      if (doctorResult.contextSizeHandoffPrompt && !parsed.flags.has("fix") && !parsed.flags.has("handoff")) {
+        await offerContextSizeHandoff(doctorResult.contextSizeHandoffPrompt);
+      }
       process.exitCode = doctorResult.exitCode;
       return;
     }
@@ -153,7 +175,21 @@ export async function main() {
   }
 }
 
-const valueFlags = new Set(["template", "root"]);
+const valueFlags = new Set(["template", "root", "handoff"]);
+
+async function contextSizePromptFor(cwd) {
+  const loaded = await loadConfig(cwd);
+  if (loaded.errors.length > 0) {
+    return null;
+  }
+
+  const report = await analyzeContextSizes(cwd, loaded.config);
+  return report.hasRisk ? buildContextSizeHandoffPrompt(report) : null;
+}
+
+function canBuildContextSizePrompt(findings) {
+  return !findings.some((finding) => finding.code === "broken-root-pointer" || finding.code === "invalid-config");
+}
 
 function parseArgs(argv) {
   const flags = new Map();
@@ -228,13 +264,15 @@ function helpText() {
 
 Usage:
   atlas init [--dry-run] [--force] [--yes] [--ci] [--template <name>] [--root <dir>]
-  atlas doctor [--fix] [--force]
+  atlas doctor [--fix] [--force] [--handoff context-size]
 
 Commands:
   init          Install or refresh the config-driven Atlas workspace
   doctor        Inspect the Atlas workspace for drift; reports fixable and
                 manual issues plus a non-blocking Advisory section
   doctor --fix  Apply safe deterministic repairs reported by doctor
+  doctor --handoff context-size
+                Print a safe agent prompt for context-size remediation
 
 Options:
   --root <dir>       Workspace root for init (repo-relative; default .ai)

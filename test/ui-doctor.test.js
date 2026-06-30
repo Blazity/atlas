@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { colorizeDoctorOutput, doctorMark } from "../src/ui/doctor.js";
+import { colorizeDoctorOutput, doctorMark, offerContextSizeHandoff } from "../src/ui/doctor.js";
 
 test("color off passes doctor text through unchanged", () => {
   const text = "Atlas doctor\nNo issues found.\n";
@@ -37,4 +37,40 @@ test("color on paints the advisory section blue and keeps issue codes yellow", (
 
 test("doctorMark renders plain text when color is off", () => {
   assert.equal(doctorMark({ color: false }), "▲ ATLAS doctor");
+});
+
+test("offerContextSizeHandoff can print the prepared prompt", async () => {
+  const notes = [];
+
+  await offerContextSizeHandoff("handoff prompt", {
+    io: {
+      isCancel: () => false,
+      detectAgents: () => [],
+      select: async () => "print",
+      note: (body, title) => notes.push({ body, title }),
+      launchAgent: async () => ({ code: 0 })
+    }
+  });
+
+  assert.deepEqual(notes, [{ body: "handoff prompt", title: "context-size handoff" }]);
+});
+
+test("offerContextSizeHandoff launches a selected agent with the prepared prompt", async () => {
+  const launches = [];
+  const codex = { name: "codex", bin: "codex", buildArgs: (prompt) => [prompt] };
+
+  await offerContextSizeHandoff("handoff prompt", {
+    io: {
+      isCancel: () => false,
+      detectAgents: () => [codex],
+      select: async () => "codex",
+      note: () => {},
+      launchAgent: async (agent, prompt) => {
+        launches.push({ agent, prompt });
+        return { code: 0 };
+      }
+    }
+  });
+
+  assert.deepEqual(launches, [{ agent: codex, prompt: "handoff prompt" }]);
 });

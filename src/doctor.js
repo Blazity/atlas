@@ -10,6 +10,7 @@ import {
   resolveArtifactPath,
   validateConfig
 } from "./config.js";
+import { analyzeContextSizes, contextSizeFinding } from "./context-size.js";
 import { applyManagedBlock, inspectManagedBlock } from "./managed-blocks.js";
 import { fileExists, readTextIfExists, repoPath } from "./repo.js";
 import {
@@ -111,6 +112,7 @@ export async function collectDoctorFindings(repoRoot, options = {}) {
   await addPlaceholderFindings(repoRoot, config, findings);
   await addAliasFindings(repoRoot, config, findings);
   await addSemanticHealthFindings(repoRoot, config, findings);
+  await addContextSizeFindings(repoRoot, config, findings);
 
   return findings;
 }
@@ -477,6 +479,13 @@ async function addSemanticHealthFindings(repoRoot, config, findings) {
     if (entries.length === 1 && entries[0] === "README.md") {
       findings.push(advisoryFinding("empty-memory", `${memoryPath} contains only README.md — no memory captured yet`));
     }
+  }
+}
+
+async function addContextSizeFindings(repoRoot, config, findings) {
+  const finding = contextSizeFinding(await analyzeContextSizes(repoRoot, config));
+  if (finding) {
+    findings.push(finding);
   }
 }
 

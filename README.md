@@ -109,7 +109,9 @@ Atlas Core ships two kinds of gates today. Structural gates are `doctor`'s deter
 
 Run `atlas doctor` to inspect an existing Atlas workspace for drift. Run `atlas doctor --fix` to apply safe deterministic repairs when the worktree is ready for changes.
 
-Doctor also reports advisories — setup still pending, empty vocabulary or memory. They inform you and nothing else: advisories never fail builds and never block `--fix`.
+Doctor also reports advisories — setup still pending, empty vocabulary or memory, and oversized AI-facing context files. They inform you and nothing else: advisories never fail builds and never block `--fix`.
+
+Context-size advisories use documented Atlas heuristics, not objective model limits. They report the character count and approximate token count for `AGENTS.md`, `CLAUDE.md`, configured vocabulary and memory files, decisions/ADRs, and managed Atlas skills. If a context-size advisory appears, run `atlas doctor --handoff context-size` to print a safe prompt for an agent to plan the cleanup without silently rewriting files.
 
 ### Doctor as a CI gate
 

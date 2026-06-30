@@ -137,3 +137,5 @@ Use after major codebase, architecture, dependency, command, or product changes.
 ## Quality Bar
 
 `AGENTS.md` should help an agent work safely within the first minute: what this repo is, how it is structured, what commands are safe, what rules matter, and what not to touch. Prefer short factual sections over long prose.
+
+`atlas doctor` reports context-size advisories with heuristic character budgets. Treat them as prompts to compact or relocate context, not as model limits. Use `atlas doctor --handoff context-size` when oversized files need a focused cleanup plan.

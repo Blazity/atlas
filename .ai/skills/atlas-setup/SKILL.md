@@ -44,7 +44,7 @@ If the current directory is not a git repository, stop and ask the user to run t
    - existing legacy docs already in the repo (ADRs, changelogs, design notes, wikis)
 
    Keep the backfill bounded: do not read the whole history or every document, and note explicitly what was skipped. Treat mined facts as candidates to confirm, not established truths.
-4. Infer only obvious facts from code. Ask about product, domain, ownership, and workflow details that code cannot answer.
+4. Infer only obvious facts from code. Route missing product, domain, ownership, and workflow details into the Context Gap Interview instead of guessing.
 5. Mark unknowns explicitly instead of inventing facts.
 
 ## Phase 3 — Template Detect-and-Confirm
@@ -57,18 +57,34 @@ Do not ask the user to pick a template name from a list. Detect the fit, show th
 4. Confirm with the user before applying. Apply by setting the config's `template` field and merging that template's `pathAliases`. Do not invent new artifact roots.
 5. Re-run `npx --yes @blazity-atlas/core@latest doctor` afterward and continue only when no fixable or manual findings remain.
 
-## Phase 4 — Interview
+## Phase 4 — Context Gap Interview
 
-Open with the fast path: ask whether the user wants to accept all recommended defaults. If yes, skip the interview and proceed with the recommendations from grounding.
+Build a missing-context list before asking anything. Use only what you inspected in code, README, package metadata, existing docs, AGENTS.md, memory, vocabulary, decisions, and bounded history. Ask only when the answer affects future agent behavior, setup quality, or safety.
+
+Open with the fast path: ask whether the user wants to accept all recommended defaults from grounding. If yes, skip the interview and proceed with those recommendations.
 
 Otherwise:
 
 - Ask one focused question at a time, always with a recommended default.
-- Hard budget of about 6 questions. Spend it on the highest-leverage unknowns; record the rest as explicit unknowns instead of asking more.
+- Hard budget: about 6 questions total. Spend it on the highest-leverage unknowns; record lower-priority unknowns instead of asking more.
 - Do not ask questions that repository inspection or the backfill already answered.
+- Explain the evidence gap briefly before the question.
 - Keep questions focused on facts that affect future agent behavior.
 
-Good questions cover: product purpose, target users, current direction, deploy/runtime expectations, architectural invariants, common pitfalls, safe commands, branch/release workflow, domain vocabulary, and external systems.
+Prioritize these missing-context topics:
+
+- Product purpose.
+- Target users.
+- Current direction.
+- Deploy/runtime expectations.
+- Architectural invariants.
+- Recurring pitfalls.
+- Safe commands.
+- Branch/release workflow.
+- Domain vocabulary.
+- External systems.
+
+Do not ask for nice-to-have background. If a lower-priority fact is useful but not blocking, record it as an explicit unknown in the setup summary or relevant artifact instead of extending the interview.
 
 ## Phase 5 — Artifact Generation
 
@@ -79,6 +95,16 @@ Resolve every path through the config from Phase 2 — never hardcode `.ai/`.
 - Fill `memory/product.md`, `memory/architecture.md`, and `memory/stack.md` with stable facts only.
 - Append `memory/lessons.md` only for proven non-obvious pitfalls.
 - Do not create new artifact roots. Use the config's `paths`.
+- Persist answers only after deciding they are stable repository context. Resolve every destination through the config:
+  - product purpose, target users, current direction -> `memory/product.md`;
+  - deploy/runtime expectations, safe commands -> `AGENTS.md` and/or `memory/stack.md`;
+  - architectural invariants -> `memory/architecture.md`;
+  - domain vocabulary -> the configured language path;
+  - recurring pitfalls -> `memory/lessons.md`, only when proven and non-obvious;
+  - branch/release workflow -> `AGENTS.md` and/or `memory/stack.md`;
+  - external systems -> `memory/architecture.md` when they affect architecture, or `memory/product.md` when they are product-facing;
+  - durable tradeoffs or accepted decisions -> `decisions/adrs`.
+- Do not persist personal names, private schedules, internal-only references, absolute local paths, secrets, PII, task-only assumptions, or transient status in durable artifacts.
 - Depersonalize everything durable: record needs, decisions, and reasons — never individuals or internal process. Write "memory was needed to persist context across runs", not "<name> wanted memory". Keep personal names, private schedules, internal-only references, and absolute local paths out of workspace artifacts.
 
 ## Phase 6 — Verify and Handover

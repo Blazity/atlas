@@ -49,6 +49,10 @@ Every review, in every mode, forces explicit answers to nine questions. A vague 
 8. What artifacts does it leave?
 9. How does it fit the rest of Atlas?
 
+## Context Dependency Rule
+
+If product, architecture, runtime, workflow, vocabulary, or external-system context is missing from code, docs, AGENTS.md, memory, vocabulary, decisions, and review artifacts, do not invent it. Ask one focused question when the answer is required for the current review; otherwise record the gap under open questions and route the user back through `atlas-setup` to capture durable project context before issuing a stronger verdict.
+
 ## Practical Checks
 
 Work through each check and collect evidence, not just answers. In Gate mode a met "blocks when" condition forces fail or conditional pass; in other modes it becomes a required change.

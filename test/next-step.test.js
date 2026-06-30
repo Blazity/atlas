@@ -8,6 +8,7 @@ test("initNextStepText leads with a self-locating pasteable agent prompt", () =>
   assert.match(text, /paste this to your coding agent/i);
   assert.match(text, /Read \.ai\/skills\/atlas-setup\/SKILL\.md and follow it/);
   assert.match(text, /finish the Atlas setup/i);
+  assert.match(text, /ask concrete missing-context questions/i);
   assert.match(text, /Claude Code: run \/atlas:atlas-setup/);
   assert.match(text, /atlas doctor --fix/);
   assert.doesNotMatch(text, /Claude users can install the `atlas` plugin/);

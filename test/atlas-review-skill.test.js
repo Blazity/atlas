@@ -47,3 +47,12 @@ test("review skill pins the verdict line, evidence standard, and artifact format
     assert.match(skill, new RegExp(field, "i"), `artifact field missing: ${field}`);
   }
 });
+
+test("review skill refuses to guess missing setup context", async () => {
+  const skill = await readFile(skillUrl, "utf8");
+  assert.match(skill, /Context Dependency Rule/);
+  assert.match(skill, /If product, architecture, runtime, workflow, vocabulary, or external-system context is missing/);
+  assert.match(skill, /do not invent it/);
+  assert.match(skill, /route the user back through `atlas-setup`/);
+  assert.match(skill, /open questions/);
+});

@@ -74,7 +74,8 @@ export function setupHandoffPrompt(root = ".ai") {
   return [
     `Read ${setupSkillPath} and follow it to finish the Atlas setup on`,
     "this repository: inspect the repo, confirm or refine the template,",
-    "and fill AGENTS.md and the workspace memory files."
+    "ask concrete missing-context questions, and fill AGENTS.md and",
+    "the workspace memory files."
   ].join("\n");
 }
 

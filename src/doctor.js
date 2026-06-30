@@ -112,7 +112,7 @@ export async function collectDoctorFindings(repoRoot, options = {}) {
   await addPlaceholderFindings(repoRoot, config, findings);
   await addAliasFindings(repoRoot, config, findings);
   await addSemanticHealthFindings(repoRoot, config, findings);
-  await addContextSizeFindings(repoRoot, config, findings);
+  await addContextSizeFindings(repoRoot, config, findings, options.diagnostics);
 
   return findings;
 }
@@ -482,8 +482,13 @@ async function addSemanticHealthFindings(repoRoot, config, findings) {
   }
 }
 
-async function addContextSizeFindings(repoRoot, config, findings) {
-  const finding = contextSizeFinding(await analyzeContextSizes(repoRoot, config));
+async function addContextSizeFindings(repoRoot, config, findings, diagnostics) {
+  const report = await analyzeContextSizes(repoRoot, config);
+  if (diagnostics) {
+    diagnostics.contextSizeReport = report;
+  }
+
+  const finding = contextSizeFinding(report);
   if (finding) {
     findings.push(finding);
   }

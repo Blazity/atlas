@@ -19,7 +19,8 @@ const managedSkillFiles = [
   ["atlas-review", "SKILL.md"]
 ];
 
-export async function analyzeContextSizes(repoRoot, config) {
+export async function analyzeContextSizes(repoRoot, config, options = {}) {
+  const readContextFile = options.readContextFile ?? defaultReadContextFile;
   const candidates = await collectContextFileCandidates(repoRoot, config);
   const entries = [];
 
@@ -29,7 +30,16 @@ export async function analyzeContextSizes(repoRoot, config) {
       continue;
     }
 
-    const content = await readFile(repoPath(repoRoot, candidate.relativePath), "utf8");
+    let content;
+    try {
+      content = await readContextFile(repoRoot, candidate.relativePath);
+    } catch {
+      continue;
+    }
+    if (typeof content !== "string") {
+      continue;
+    }
+
     entries.push(classifySize({
       ...candidate,
       characterCount: content.length,
@@ -208,6 +218,10 @@ async function fileStat(repoRoot, relativePath) {
   } catch {
     return null;
   }
+}
+
+async function defaultReadContextFile(repoRoot, relativePath) {
+  return readFile(repoPath(repoRoot, relativePath), "utf8");
 }
 
 function isMarkdownFile(fileName) {

@@ -1,7 +1,7 @@
-import { collectDoctorFindings, applyFixes, loadConfig } from "./doctor.js";
+import { collectDoctorFindings, applyFixes } from "./doctor.js";
 import { runInit } from "./init.js";
 import { getTemplateNames, workspaceRootError } from "./config.js";
-import { analyzeContextSizes, buildContextSizeHandoffPrompt } from "./context-size.js";
+import { buildContextSizeHandoffPrompt } from "./context-size.js";
 import { exitCodeForFindings, formatFindings } from "./output.js";
 import { gitStatus, isGitRepo } from "./repo.js";
 import { detectMode } from "./ui/runtime.js";
@@ -59,8 +59,9 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
       return { exitCode: 2, stdout: "", stderr: "Refusing to inspect: current directory is not a git repository.\n" };
     }
 
-    const findings = await collectDoctorFindings(cwd);
-    const contextSizeHandoffPrompt = canBuildContextSizePrompt(findings) ? await contextSizePromptFor(cwd) : null;
+    const diagnostics = {};
+    const findings = await collectDoctorFindings(cwd, { diagnostics });
+    const contextSizeHandoffPrompt = canBuildContextSizePrompt(findings) ? contextSizePromptFor(diagnostics.contextSizeReport) : null;
     if (parsed.flags.has("handoff")) {
       return {
         exitCode: exitCodeForFindings(findings),
@@ -177,14 +178,8 @@ export async function main() {
 
 const valueFlags = new Set(["template", "root", "handoff"]);
 
-async function contextSizePromptFor(cwd) {
-  const loaded = await loadConfig(cwd);
-  if (loaded.errors.length > 0) {
-    return null;
-  }
-
-  const report = await analyzeContextSizes(cwd, loaded.config);
-  return report.hasRisk ? buildContextSizeHandoffPrompt(report) : null;
+function contextSizePromptFor(report) {
+  return report?.hasRisk ? buildContextSizeHandoffPrompt(report) : null;
 }
 
 function canBuildContextSizePrompt(findings) {

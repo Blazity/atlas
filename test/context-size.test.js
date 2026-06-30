@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -78,6 +78,26 @@ test("analyzeContextSizes resolves configured artifact paths and deduplicates AD
     assert(paths.includes(".ai/VOCAB.md"));
     assert(paths.includes(".ai/knowledge/architecture.md"));
     assert.equal(paths.filter((entry) => entry === ".ai/records/adrs/0001-test.md").length, 1);
+  });
+});
+
+test("analyzeContextSizes skips files that disappear before read", async () => {
+  await withTempWorkspace(async (directory) => {
+    const config = createDefaultConfig();
+    await mkdir(path.join(directory, ".ai"), { recursive: true });
+    await writeFile(path.join(directory, "AGENTS.md"), "# Agents\n");
+    await writeFile(path.join(directory, ".ai/LANGUAGE.md"), "# Vocabulary\n");
+
+    const report = await analyzeContextSizes(directory, config, {
+      readContextFile: async (repoRoot, relativePath) => {
+        if (relativePath === "AGENTS.md") {
+          throw new Error("simulated stat-to-read race");
+        }
+        return readFile(path.join(repoRoot, relativePath), "utf8");
+      }
+    });
+
+    assert(!report.entries.some((entry) => entry.relativePath === "AGENTS.md"));
   });
 });
 

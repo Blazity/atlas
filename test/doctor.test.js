@@ -533,9 +533,10 @@ test("doctor reports oversized AI context as advisory-only and --fix does not mu
     const agentsPath = path.join(directory, "AGENTS.md");
     const agents = await readFile(agentsPath, "utf8");
     await writeFile(agentsPath, `${agents}\n${"a".repeat(16000)}\n`);
+    const beforeDoctor = await readFile(agentsPath, "utf8");
 
     const report = await runCli(["doctor"], { cwd: directory });
-    const beforeFix = await readFile(agentsPath, "utf8");
+    const afterDoctor = await readFile(agentsPath, "utf8");
     const fix = await runCli(["doctor", "--fix"], { cwd: directory });
     const afterFix = await readFile(agentsPath, "utf8");
 
@@ -547,7 +548,24 @@ test("doctor reports oversized AI context as advisory-only and --fix does not mu
     assert.match(report.stdout, /threshold 16,000/);
     assert.match(report.stdout, /Agent handoff: atlas doctor --handoff context-size/);
     assert.equal(fix.exitCode, 0);
-    assert.equal(afterFix, beforeFix);
+    assert.equal(afterDoctor, beforeDoctor);
+    assert.equal(afterFix, beforeDoctor);
+  });
+});
+
+test("collectDoctorFindings exposes context-size diagnostics for CLI handoff reuse", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+    const agentsPath = path.join(directory, "AGENTS.md");
+    const agents = await readFile(agentsPath, "utf8");
+    await writeFile(agentsPath, `${agents}\n${"a".repeat(16000)}\n`);
+    const diagnostics = {};
+
+    const findings = await collectDoctorFindings(directory, { diagnostics });
+
+    assert(findings.some((finding) => finding.code === "context-size"));
+    assert.equal(diagnostics.contextSizeReport.hasRisk, true);
+    assert(diagnostics.contextSizeReport.entries.some((entry) => entry.relativePath === "AGENTS.md"));
   });
 });
 

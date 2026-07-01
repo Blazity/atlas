@@ -33,9 +33,25 @@ export function colorizeDoctorOutput(text, { color }) {
         const paint = inAdvisorySection ? theme.blue : theme.yellow;
         return line.replace(/^(- \[[^\]]+\])/, (match) => paint(match));
       }
-      return line.replace(/No issues found\./g, (match) => theme.green(match));
+      const contextSizeLine = colorizeContextSizeBar(line, theme);
+      return contextSizeLine.replace(/No issues found\./g, (match) => theme.green(match));
     })
     .join("\n");
+}
+
+function colorizeContextSizeBar(line, theme) {
+  const status = line.match(/^\s+- (OK|WARN|OVERFLOW)\b/u)?.[1];
+  if (!status) {
+    return line;
+  }
+
+  const paint = {
+    OK: theme.green,
+    WARN: theme.yellow,
+    OVERFLOW: theme.orange
+  }[status];
+
+  return line.replace(/\[[# ]{20}\]\s+\d+%/u, (match) => paint(match));
 }
 
 export async function offerContextSizeHandoff(prompt, { io = {} } = {}) {

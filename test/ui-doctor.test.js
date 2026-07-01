@@ -35,6 +35,26 @@ test("color on paints the advisory section blue and keeps issue codes yellow", (
   assert.doesNotMatch(out, /\x1b\[38;2;255;200;0m- \[setup-pending\]/);
 });
 
+test("color on paints context-size bars by status", () => {
+  const text = [
+    "Atlas doctor",
+    "Advisory:",
+    "- [context-size] AI context size risk",
+    "  - OK .ai/LANGUAGE.md [                    ]   1% - 156 chars",
+    "  - WARN AGENTS.md [##########          ]  52% - 16,950 chars",
+    "  - OVERFLOW prompt-loaded context [####################] 121% - 79,000 chars",
+    ""
+  ].join("\n");
+  const out = colorizeDoctorOutput(text, { color: true });
+  const green = "\x1b[38;2;187;237;128m";
+  const yellow = "\x1b[38;2;255;200;0m";
+  const orange = "\x1b[38;2;255;106;51m";
+
+  assert.ok(out.includes(`${green}[                    ]   1%\x1b[0m`));
+  assert.ok(out.includes(`${yellow}[##########          ]  52%\x1b[0m`));
+  assert.ok(out.includes(`${orange}[####################] 121%\x1b[0m`));
+});
+
 test("doctorMark renders plain text when color is off", () => {
   assert.equal(doctorMark({ color: false }), "▲ ATLAS doctor");
 });

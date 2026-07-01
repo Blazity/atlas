@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { createDefaultConfig } from "../src/config.js";
-import { analyzeContextSizes, buildContextSizeHandoffPrompt } from "../src/context-size.js";
+import { analyzeContextSizes, buildContextSizeHandoffPrompt, contextSizeDetailLines } from "../src/context-size.js";
 
 async function withTempWorkspace(fn) {
   const directory = await mkdtemp(path.join(tmpdir(), "atlas-context-size-"));
@@ -35,15 +35,33 @@ test("analyzeContextSizes classifies AI context files by heuristic thresholds", 
     const report = await analyzeContextSizes(directory, config);
     const byPath = new Map(report.entries.map((entry) => [entry.relativePath, entry]));
 
-    assert.equal(byPath.get("AGENTS.md").status, "overflow");
-    assert.equal(byPath.get("AGENTS.md").threshold, 16000);
-    assert.equal(byPath.get("AGENTS.md").overBy, 1);
+    assert.equal(byPath.get("AGENTS.md").status, "warn");
+    assert.equal(byPath.get("AGENTS.md").threshold, 8000);
+    assert.equal(byPath.get("AGENTS.md").overBy, 8001);
+    assert.equal(byPath.get("AGENTS.md").usagePercent, 49);
+    assert.equal(byPath.get("AGENTS.md").usageBar, "[##########          ]  49%");
     assert.equal(byPath.get(".ai/LANGUAGE.md").status, "warn");
     assert.equal(byPath.get(".ai/LANGUAGE.md").threshold, 12000);
     assert.equal(byPath.get(".ai/LANGUAGE.md").overBy, 1);
     assert.equal(byPath.get(".ai/decisions/adrs/0001-test.md").status, "ok");
     assert.equal(report.aggregate.status, "ok");
     assert.equal(report.hasRisk, true);
+  });
+});
+
+test("context-size details show ASCII usage bars and source-informed threshold notes", async () => {
+  await withTempWorkspace(async (directory) => {
+    const config = createDefaultConfig();
+    await mkdir(path.join(directory, ".ai/memory"), { recursive: true });
+    await writeFile(path.join(directory, "AGENTS.md"), "a".repeat(16001));
+    await writeFile(path.join(directory, ".ai/LANGUAGE.md"), "# Vocabulary\n");
+    await writeFile(path.join(directory, ".ai/memory/product.md"), "# Product\n");
+
+    const lines = contextSizeDetailLines(await analyzeContextSizes(directory, config));
+
+    assert(lines.some((line) => /^WARN AGENTS\.md \[########## {10}\]  49% - /.test(line)));
+    assert(lines.some((line) => /warn 8,000 chars \/ 200 lines, overflow 32,768 chars/.test(line)));
+    assert(lines.includes("Basis: Codex project docs default cap is 32 KiB; Claude Code targets under 200 lines and auto memory startup loads the first 200 lines or 25KB; Gemini CLI shows context usage and compresses at 50% by default."));
   });
 });
 

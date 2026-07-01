@@ -5,13 +5,16 @@ import { normalizePath, resolveArtifactPath } from "./config.js";
 import { repoPath } from "./repo.js";
 
 export const contextSizeThresholds = {
-  rootInstruction: { warn: 8000, overflow: 16000 },
-  language: { warn: 12000, overflow: 24000 },
-  memory: { warn: 12000, overflow: 24000 },
+  rootInstruction: { warn: 8000, warnLines: 200, overflow: 32768 },
+  language: { warn: 12000, overflow: 25000 },
+  memory: { warn: 12000, overflow: 25000 },
   decision: { warn: 32000, overflow: 64000 },
   managedSkill: { warn: 32000, overflow: 64000 },
-  promptLoadedAggregate: { warn: 40000, overflow: 80000 }
+  promptLoadedAggregate: { warn: 32768, overflow: 64000 }
 };
+
+const usageBarWidth = 20;
+const thresholdBasis = "Basis: Codex project docs default cap is 32 KiB; Claude Code targets under 200 lines and auto memory startup loads the first 200 lines or 25KB; Gemini CLI shows context usage and compresses at 50% by default.";
 
 const managedSkillFiles = [
   ["atlas-setup", "SKILL.md"],
@@ -43,6 +46,7 @@ export async function analyzeContextSizes(repoRoot, config, options = {}) {
     entries.push(classifySize({
       ...candidate,
       characterCount: content.length,
+      lineCount: countLines(content),
       ...contextSizeThresholds[candidate.thresholdKey]
     }));
   }
@@ -57,6 +61,7 @@ export async function analyzeContextSizes(repoRoot, config, options = {}) {
     thresholdKey: "promptLoadedAggregate",
     promptLoaded: false,
     characterCount: promptLoadedEntries.reduce((sum, entry) => sum + entry.characterCount, 0),
+    lineCount: promptLoadedEntries.reduce((sum, entry) => sum + entry.lineCount, 0),
     ...contextSizeThresholds.promptLoadedAggregate
   });
 
@@ -92,7 +97,8 @@ export function contextSizeDetailLines(report) {
   const lines = report.entries.map(formatEntryLine);
   lines.push(formatEntryLine(report.aggregate));
   lines.push("Remediation: keep root instructions to commands, invariants, and safety rules; move durable detail into configured memory or decisions.");
-  lines.push("Thresholds are Atlas heuristics, not model limits.");
+  lines.push(thresholdBasis);
+  lines.push("Thresholds are Atlas heuristics that combine documented agent caps with conservative adherence guidance.");
   lines.push("Agent handoff: atlas doctor --handoff context-size");
   return lines;
 }
@@ -121,7 +127,8 @@ export function buildContextSizeHandoffPrompt(report) {
     "- Keep root instructions focused on commands, invariants, and safety rules.",
     "- Move durable product, architecture, stack, and lesson detail into configured memory files.",
     "- Move decisions and rationale into configured decisions or ADR paths.",
-    "- Treat thresholds as Atlas heuristics, not objective model limits.",
+    `- ${thresholdBasis}`,
+    "- Treat thresholds as Atlas heuristics that combine documented agent caps with conservative adherence guidance.",
     "",
     "After changes, run atlas doctor again and include the before/after context-size output."
   ].join("\n");
@@ -229,30 +236,81 @@ function isMarkdownFile(fileName) {
 }
 
 function classifySize(entry) {
+  const lineOverBy = entry.warnLines && entry.lineCount > entry.warnLines
+    ? entry.lineCount - entry.warnLines
+    : 0;
   const status = entry.characterCount > entry.overflow
     ? "overflow"
-    : entry.characterCount > entry.warn
+    : entry.characterCount > entry.warn || lineOverBy > 0
       ? "warn"
       : "ok";
   const threshold = status === "overflow" ? entry.overflow : entry.warn;
-  const overBy = status === "ok" ? 0 : entry.characterCount - threshold;
+  const overBy = status === "ok" || entry.characterCount <= threshold ? 0 : entry.characterCount - threshold;
 
   return {
     ...entry,
     status,
     threshold,
     overBy,
+    lineOverBy,
+    usagePercent: usagePercent(entry.characterCount, entry.overflow),
+    usageBar: formatUsageBar(entry.characterCount, entry.overflow),
     approximateTokens: Math.ceil(entry.characterCount / 4)
   };
 }
 
 function formatEntryLine(entry) {
   const status = entry.status.toUpperCase();
-  return `${status} ${entry.label ?? entry.relativePath} - ${formatCharacterSummary(entry)}, threshold ${formatNumber(entry.threshold)}${entry.overBy > 0 ? `, over by ${formatNumber(entry.overBy)}` : ""}`;
+  return [
+    `${status} ${entry.label ?? entry.relativePath} ${entry.usageBar} - ${formatCharacterSummary(entry)}, ${formatLineSummary(entry.lineCount)}`,
+    `warn ${formatThreshold(entry.warn, entry.warnLines)}`,
+    `overflow ${formatNumber(entry.overflow)} chars`,
+    ...formatOverage(entry)
+  ].join(", ");
 }
 
 function formatCharacterSummary(entry) {
   return `${formatNumber(entry.characterCount)} chars (~${formatNumber(entry.approximateTokens)} tokens)`;
+}
+
+function formatLineSummary(lineCount) {
+  return `${formatNumber(lineCount)} ${lineCount === 1 ? "line" : "lines"}`;
+}
+
+function formatThreshold(chars, lines) {
+  const parts = [`${formatNumber(chars)} chars`];
+  if (lines) {
+    parts.push(`${formatNumber(lines)} lines`);
+  }
+  return parts.join(" / ");
+}
+
+function formatOverage(entry) {
+  const overage = [];
+  if (entry.overBy > 0) {
+    overage.push(`over ${entry.status === "overflow" ? "overflow" : "warn"} by ${formatNumber(entry.overBy)} chars`);
+  }
+  if (entry.lineOverBy > 0) {
+    overage.push(`over line guidance by ${formatNumber(entry.lineOverBy)} lines`);
+  }
+  return overage;
+}
+
+function formatUsageBar(characterCount, overflow) {
+  const filled = Math.min(usageBarWidth, Math.round((characterCount / overflow) * usageBarWidth));
+  const bar = `${"#".repeat(filled)}${" ".repeat(usageBarWidth - filled)}`;
+  return `[${bar}] ${String(usagePercent(characterCount, overflow)).padStart(3)}%`;
+}
+
+function usagePercent(characterCount, overflow) {
+  return Math.round((characterCount / overflow) * 100);
+}
+
+function countLines(content) {
+  if (!content) {
+    return 0;
+  }
+  return content.split("\n").length;
 }
 
 function formatNumber(value) {

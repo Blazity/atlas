@@ -24,7 +24,8 @@ const managedSkillFiles = [
 
 export async function analyzeContextSizes(repoRoot, config, options = {}) {
   const readContextFile = options.readContextFile ?? defaultReadContextFile;
-  const candidates = await collectContextFileCandidates(repoRoot, config);
+  const readDirectory = options.readDirectory ?? defaultReadDirectory;
+  const candidates = await collectContextFileCandidates(repoRoot, config, { readDirectory });
   const entries = [];
 
   for (const candidate of candidates) {
@@ -134,7 +135,7 @@ export function buildContextSizeHandoffPrompt(report) {
   ].join("\n");
 }
 
-async function collectContextFileCandidates(repoRoot, config) {
+async function collectContextFileCandidates(repoRoot, config, io) {
   const candidates = [
     rootCandidate("AGENTS.md"),
     rootCandidate("CLAUDE.md"),
@@ -150,19 +151,19 @@ async function collectContextFileCandidates(repoRoot, config) {
     category: "memory",
     thresholdKey: "memory",
     promptLoaded: true
-  }));
+  }, io));
 
   candidates.push(...await markdownFiles(repoRoot, resolveArtifactPath(config, "decisions"), {
     category: "decision",
     thresholdKey: "decision",
     promptLoaded: false
-  }));
+  }, io));
 
   candidates.push(...await markdownFiles(repoRoot, resolveArtifactPath(config, "adrs"), {
     category: "decision",
     thresholdKey: "decision",
     promptLoaded: false
-  }));
+  }, io));
 
   const skillsRoot = resolveArtifactPath(config, "skills");
   for (const [skillName, fileName] of managedSkillFiles) {
@@ -186,18 +187,23 @@ function rootCandidate(relativePath) {
   };
 }
 
-async function markdownFiles(repoRoot, relativeRoot, options) {
+async function markdownFiles(repoRoot, relativeRoot, options, io) {
   const stats = await fileStat(repoRoot, relativeRoot);
   if (!stats?.isDirectory()) {
     return [];
   }
 
-  const entries = await readdir(repoPath(repoRoot, relativeRoot), { withFileTypes: true });
+  let entries;
+  try {
+    entries = await io.readDirectory(repoPath(repoRoot, relativeRoot), { withFileTypes: true });
+  } catch {
+    return [];
+  }
   const files = [];
   for (const entry of entries) {
     const relativePath = normalizePath(path.join(relativeRoot, entry.name));
     if (entry.isDirectory()) {
-      files.push(...await markdownFiles(repoRoot, relativePath, options));
+      files.push(...await markdownFiles(repoRoot, relativePath, options, io));
     } else if (entry.isFile() && isMarkdownFile(entry.name)) {
       files.push({ relativePath, ...options });
     }
@@ -229,6 +235,10 @@ async function fileStat(repoRoot, relativePath) {
 
 async function defaultReadContextFile(repoRoot, relativePath) {
   return readFile(repoPath(repoRoot, relativePath), "utf8");
+}
+
+async function defaultReadDirectory(absolutePath, options) {
+  return readdir(absolutePath, options);
 }
 
 function isMarkdownFile(fileName) {

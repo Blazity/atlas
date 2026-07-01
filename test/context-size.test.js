@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -116,6 +116,28 @@ test("analyzeContextSizes skips files that disappear before read", async () => {
     });
 
     assert(!report.entries.some((entry) => entry.relativePath === "AGENTS.md"));
+  });
+});
+
+test("analyzeContextSizes skips directories that disappear before scan", async () => {
+  await withTempWorkspace(async (directory) => {
+    const config = createDefaultConfig();
+    await mkdir(path.join(directory, ".ai/memory"), { recursive: true });
+    await writeFile(path.join(directory, "AGENTS.md"), "# Agents\n");
+    await writeFile(path.join(directory, ".ai/LANGUAGE.md"), "# Vocabulary\n");
+    await writeFile(path.join(directory, ".ai/memory/product.md"), "# Product\n");
+
+    const report = await analyzeContextSizes(directory, config, {
+      readDirectory: async (absolutePath, options) => {
+        if (absolutePath.endsWith(path.join(".ai", "memory"))) {
+          throw new Error("simulated stat-to-readdir race");
+        }
+        return readdir(absolutePath, options);
+      }
+    });
+
+    assert(report.entries.some((entry) => entry.relativePath === "AGENTS.md"));
+    assert(!report.entries.some((entry) => entry.relativePath === ".ai/memory/product.md"));
   });
 });
 

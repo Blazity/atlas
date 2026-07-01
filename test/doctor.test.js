@@ -527,6 +527,79 @@ test("doctor reports empty vocabulary and memory as advisories until they gain c
   });
 });
 
+test("doctor reports oversized AI context as advisory-only and --fix does not mutate it", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+    const agentsPath = path.join(directory, "AGENTS.md");
+    const agents = await readFile(agentsPath, "utf8");
+    await writeFile(agentsPath, `${agents}\n${"a".repeat(16000)}\n`);
+    const beforeDoctor = await readFile(agentsPath, "utf8");
+
+    const report = await runCli(["doctor"], { cwd: directory });
+    const afterDoctor = await readFile(agentsPath, "utf8");
+    const fix = await runCli(["doctor", "--fix"], { cwd: directory });
+    const afterFix = await readFile(agentsPath, "utf8");
+
+    assert.equal(report.exitCode, 0);
+    assert.match(report.stdout, /No issues found\./);
+    assert.match(report.stdout, /^Advisory:$/m);
+    assert.match(report.stdout, /\[context-size\] AI context size risk:/);
+    assert.match(report.stdout, /WARN AGENTS\.md \[########## {10}\]\s+52%/);
+    assert.match(report.stdout, /warn 8,000 chars \/ 200 lines, overflow 32,768 chars/);
+    assert.match(report.stdout, /Basis: Codex project docs default cap is 32 KiB/);
+    assert.match(report.stdout, /Agent handoff: atlas doctor --handoff context-size/);
+    assert.equal(fix.exitCode, 0);
+    assert.equal(afterDoctor, beforeDoctor);
+    assert.equal(afterFix, beforeDoctor);
+  });
+});
+
+test("collectDoctorFindings exposes context-size diagnostics for CLI handoff reuse", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+    const agentsPath = path.join(directory, "AGENTS.md");
+    const agents = await readFile(agentsPath, "utf8");
+    await writeFile(agentsPath, `${agents}\n${"a".repeat(16000)}\n`);
+    const diagnostics = {};
+
+    const findings = await collectDoctorFindings(directory, { diagnostics });
+
+    assert(findings.some((finding) => finding.code === "context-size"));
+    assert.equal(diagnostics.contextSizeReport.hasRisk, true);
+    assert(diagnostics.contextSizeReport.entries.some((entry) => entry.relativePath === "AGENTS.md"));
+  });
+});
+
+test("doctor leaves clean AI context without a context-size advisory", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+
+    const report = await runCli(["doctor"], { cwd: directory });
+
+    assert.equal(report.exitCode, 0);
+    assert.doesNotMatch(report.stdout, /\[context-size\]/);
+  });
+});
+
+test("doctor --handoff context-size prints a safe prompt without mutating files", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+    const agentsPath = path.join(directory, "AGENTS.md");
+    const agents = await readFile(agentsPath, "utf8");
+    await writeFile(agentsPath, `${agents}\n${"a".repeat(16000)}\n`);
+    const before = await readFile(agentsPath, "utf8");
+
+    const handoff = await runCli(["doctor", "--handoff", "context-size"], { cwd: directory });
+    const after = await readFile(agentsPath, "utf8");
+
+    assert.equal(handoff.exitCode, 0);
+    assert.match(handoff.stdout, /^Atlas doctor handoff$/m);
+    assert.match(handoff.stdout, /Do not rewrite files silently/);
+    assert.match(handoff.stdout, /AGENTS\.md/);
+    assert.equal(after, before);
+  });
+});
+
 test("fresh init survives commit and clone with doctor exit 0", async () => {
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });

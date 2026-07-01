@@ -109,7 +109,18 @@ Atlas Core ships two kinds of gates today. Structural gates are `doctor`'s deter
 
 Run `atlas doctor` to inspect an existing Atlas workspace for drift. Run `atlas doctor --fix` to apply safe deterministic repairs when the worktree is ready for changes.
 
-Doctor also reports advisories — setup still pending, empty vocabulary or memory. They inform you and nothing else: advisories never fail builds and never block `--fix`.
+Doctor also reports advisories — setup still pending, empty vocabulary or memory, and oversized AI-facing context files. They inform you and nothing else: advisories never fail builds and never block `--fix`.
+
+Context-size advisories use source-informed Atlas heuristics, not objective model limits. They report a fixed ASCII usage bar like `[##########          ]  52%`, character count, line count, and approximate token count for `AGENTS.md`, `CLAUDE.md`, configured vocabulary and memory files, decisions/ADRs, and managed Atlas skills. If a context-size advisory appears, run `atlas doctor --handoff context-size` to print a safe prompt for an agent to plan the cleanup without silently rewriting files.
+
+| Surface | Warn | Overflow | Basis |
+| --- | ---: | ---: | --- |
+| Root instructions (`AGENTS.md`, `CLAUDE.md`) | 8,000 chars or 200 lines | 32,768 chars | Codex stops loading project docs at `project_doc_max_bytes` (32 KiB default); Claude Code recommends keeping `CLAUDE.md` under 200 lines. |
+| Vocabulary and memory | 12,000 chars | 25,000 chars | Claude Code auto memory startup loads the first 200 lines or 25KB. |
+| Decisions, ADRs, and managed Atlas skills | 32,000 chars | 64,000 chars | Usually not loaded into every prompt, but still expensive to hand to an agent. |
+| Prompt-loaded aggregate | 32,768 chars | 64,000 chars | Captures the combined context an agent is likely to receive. |
+
+The warning line is intentionally earlier than most hard limits: agents should keep root instructions and memory deliberate. The heuristic is informed by [Codex `AGENTS.md` docs](https://developers.openai.com/codex/guides/agents-md), [Claude Code memory docs](https://code.claude.com/docs/en/memory), [Gemini CLI context docs](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/gemini-md.md), [GitHub Copilot custom-instruction guidance](https://docs.github.com/en/copilot/how-tos/configure-custom-instructions/add-repository-instructions), and [Aider token-limit guidance](https://aider.chat/docs/troubleshooting/token-limits.html).
 
 ### Doctor as a CI gate
 

@@ -40,7 +40,8 @@ export function defaultLanguageMd() {
     "## Terms",
     "",
     "| Term | Meaning | Avoid |",
-    "| --- | --- | --- |"
+    "| --- | --- | --- |",
+    "| Atlas workspace | The repo-owned AI context directory scaffolded by Atlas (default `.ai/`) | \"the AI docs\" <!-- TODO: replace this example row with real project terms --> |"
   ].join("\n");
 }
 
@@ -49,7 +50,10 @@ export function defaultMemoryReadme() {
     "# AI Memory",
     "",
     "Stable product, architecture, stack, and lessons memory for AI agents.",
-    "Keep volatile task status in the issue tracker, not here."
+    "Keep volatile task status in the issue tracker, not here.",
+    "",
+    "Good entry: \"Payments run through an adapter because the provider API changed twice.\"",
+    "Weak entry: \"Payments were discussed.\" Record needs, decisions, and reasons."
   ].join("\n");
 }
 
@@ -84,12 +88,18 @@ export function initNextStepText(root = ".ai") {
     .split("\n")
     .map((line) => `  ${line}`)
     .join("\n");
+  const normalizedRoot = normalizePath(root);
+  const scaffoldPaths = [normalizedRoot, ".claude", ".agents", ".cursor", "AGENTS.md", "CLAUDE.md"];
+  if (normalizedRoot !== ".ai") {
+    scaffoldPaths.push(".atlas");
+  }
   return [
     "Next step — paste this to your coding agent:",
     "",
     indentedPrompt,
     "",
-    "Claude Code: run /atlas:atlas-setup",
-    "Repair drift later: atlas doctor --fix"
+    "Claude Code: run /atlas-setup (or /atlas:atlas-setup with the Atlas plugin)",
+    "Repair drift later: atlas doctor --fix",
+    `Commit the scaffold when ready: git add ${scaffoldPaths.join(" ")}`
   ].join("\n");
 }

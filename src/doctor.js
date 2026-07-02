@@ -350,7 +350,12 @@ async function addManagedFileFindings(repoRoot, root, findings) {
     : applyManagedBlock(currentAgents, managedBlockId, agentManagedBlock(root));
 
   if (currentAgents !== nextAgents) {
-    findings.push(fixableFinding("missing-managed-block", "AGENTS.md is missing the Atlas managed artifact-path block", {
+    const blockExists = currentAgents !== null && inspectManagedBlock(currentAgents, managedBlockId).state === "present";
+    const code = blockExists ? "stale-managed-block" : "missing-managed-block";
+    const message = blockExists
+      ? "AGENTS.md managed artifact-path block differs from the current Atlas version"
+      : "AGENTS.md is missing the Atlas managed artifact-path block";
+    findings.push(fixableFinding(code, message, {
       type: "write",
       relativePath: "AGENTS.md",
       absolutePath: agentsPath,
@@ -393,7 +398,11 @@ async function addSkillLinkFindings(repoRoot, config, findings) {
 
     const stats = await lstat(absolutePath);
     if (!stats.isSymbolicLink()) {
-      findings.push(manualFinding("skill-link-collision", `${relativePath} exists but is not a symlink`));
+      const skillsRelativePath = resolveArtifactPath(config, "skills");
+      findings.push(manualFinding(
+        "skill-link-collision",
+        `${relativePath} exists but is not a symlink — move its contents into ${skillsRelativePath}/ (they stay discoverable through the symlink), then run atlas doctor --fix`
+      ));
       continue;
     }
 

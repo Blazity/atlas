@@ -4,8 +4,7 @@ const requiredPaths = ["language", "memory", "plans", "research", "decisions", "
 const setupStates = ["scaffolded", "configured"];
 const agentSurfaceNames = ["claude", "agents", "cursor"];
 const basePathAliases = {
-  "docs/superpowers/plans": "plans",
-  "docs/superpowers/specs": "research",
+  "docs/plans": "plans",
   "docs/adrs": "decisions/adrs",
   "docs/specs": "research"
 };

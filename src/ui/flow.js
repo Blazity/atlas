@@ -1,13 +1,12 @@
 import { cancel, confirm, intro, isCancel, log, note, outro, select, spinner, text } from "@clack/prompts";
 
 import { applyFixes, collectDoctorFindings, findingSeverity, loadConfig } from "../doctor.js";
-import { gitStatus } from "../repo.js";
+import { gitStatus, isRepoSubdirectory } from "../repo.js";
 import { buildPlan } from "../plan.js";
 import { normalizePath, workspaceRootError } from "../config.js";
 import { initNextStepText, setupHandoffPrompt } from "../templates.js";
 import { animateLogo } from "./logo.js";
 import { detectAgents, launchAgent } from "./launcher.js";
-import { atlasSleep } from "./sleep.js";
 import { makeTheme } from "./theme.js";
 
 export function planTreeLines(plan, { color }) {
@@ -50,7 +49,7 @@ export function summarizeDoctorPass(findings) {
   return { healthy: true, summary: `doctor · 0 issues · workspace healthy${advisorySuffix}`, remaining };
 }
 
-export async function runInteractiveInit({ cwd, templateName = "standard", color = true, force = false, root, io = {} }) {
+export async function runInteractiveInit({ cwd, templateName = "standard", color = true, force = false, here = false, root, io = {} }) {
   // The io seam lets tests drive prompts and agent launches without a TTY.
   const ui = { isCancel, text, confirm, select, detectAgents, launchAgent, ...io };
 
@@ -59,6 +58,22 @@ export async function runInteractiveInit({ cwd, templateName = "standard", color
   process.stdout.write(`${theme.dim("the agentic repo standard")}\n\n`);
 
   intro("atlas init");
+
+  if (!here) {
+    const location = await isRepoSubdirectory(cwd);
+    if (location.subdirectory) {
+      note(`This directory is inside ${location.toplevel}.`, "repository root");
+      const proceed = await ui.confirm({ message: "Scaffold a nested workspace here instead of at the root?", initialValue: false });
+      if (ui.isCancel(proceed)) {
+        cancel("Cancelled. Nothing written.");
+        return 130;
+      }
+      if (!proceed) {
+        cancel("Nothing written. Run atlas init from the repository root.");
+        return 0;
+      }
+    }
+  }
 
   const workspaceRoot = await resolveWorkspaceRoot(ui, cwd, root);
   if (workspaceRoot === null) {
@@ -69,7 +84,6 @@ export async function runInteractiveInit({ cwd, templateName = "standard", color
   const scan = spinner();
   scan.start("scanning repository…");
   const plan = await buildPlan(cwd, { templateName, root: workspaceRoot });
-  await atlasSleep(300);
   scan.stop("Repository scanned");
 
   if (plan.conflicts.length > 0) {

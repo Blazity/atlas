@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [20, 22]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      # Dogfood the local CLI only. Never use npx / the published package here:
+      # the published doctor --fix would overwrite unreleased managed skill edits.
+      - run: node bin/atlas.js doctor
+
+  test-windows:
+    # Observational leg: symlink behavior on Windows is unverified.
+    # Failures here gather evidence and do not block the build.
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: node bin/atlas.js doctor
+        continue-on-error: true

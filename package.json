@@ -1,10 +1,34 @@
 {
   "name": "@blazity-atlas/core",
   "version": "0.3.0",
-  "description": "Config-driven repo memory, rules, skills, and templates for AI agents — the Atlas CLI.",
+  "description": "One command scaffolds the AGENTS.md, repo memory, and vocabulary every coding agent shares (Claude Code, Cursor, Codex) — then atlas doctor verifies the structure in CI with frozen exit codes.",
+  "keywords": [
+    "agents-md",
+    "agents.md",
+    "claude-code",
+    "claude-md",
+    "cursor",
+    "codex",
+    "copilot",
+    "gemini-cli",
+    "ai-agents",
+    "coding-agents",
+    "context-engineering",
+    "repo-memory",
+    "ai-memory",
+    "adr",
+    "agent-skills",
+    "scaffold",
+    "cli"
+  ],
+  "homepage": "https://github.com/Blazity/atlas#readme",
+  "bugs": {
+    "url": "https://github.com/Blazity/atlas/issues"
+  },
   "type": "module",
   "bin": {
-    "atlas": "bin/atlas.js"
+    "atlas": "bin/atlas.js",
+    "blazity-atlas": "bin/atlas.js"
   },
   "files": [
     "bin/",

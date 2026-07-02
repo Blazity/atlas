@@ -23,7 +23,7 @@
     },
     {
       "name": "atlas",
-      "description": "Bootstrap and maintain a repo-owned Atlas workspace through the published Atlas CLI.",
+      "description": "Set up and maintain your repo's AI context — AGENTS.md, memory, vocabulary, ADRs — and run reviews that leave recorded verdicts. One shared workspace for Claude Code, Cursor, and Codex.",
       "author": {
         "name": "Blazity"
       },

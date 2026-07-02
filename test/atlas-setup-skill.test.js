@@ -30,6 +30,20 @@ test("setup skill keeps the deterministic bootstrap contract", async () => {
   assert.match(skill, /manual conflicts/);
 });
 
+test("setup skill prefers a locally installed CLI before the network fallback", async () => {
+  const skill = await readFile(skillUrl, "utf8");
+  assert.match(skill, /npx --no-install @blazity-atlas\/core doctor/);
+  assert.match(skill, /fall back to the published package/i);
+  assert.match(skill, /re-read this skill file/);
+});
+
+test("setup skill demands a cold-context first-value proof with citations", async () => {
+  const skill = await readFile(skillUrl, "utf8");
+  assert.match(skill, /first-value proof/);
+  assert.match(skill, /fresh agent context/);
+  assert.match(skill, /does not count as proof/);
+});
+
 test("setup skill blocks on fixable or manual findings but not advisories", async () => {
   const skill = await readFile(skillUrl, "utf8");
   assert.match(skill, /[Aa]dvisory findings[^.]*do not count as unclean/);

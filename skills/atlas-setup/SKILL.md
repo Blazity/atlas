@@ -17,11 +17,13 @@ Run the phases below in order.
 
 Before inspecting repository meaning, announce the deterministic setup steps you are about to run.
 
-From the repository root, run:
+From the repository root, run the Atlas CLI. Prefer a locally installed copy so the run works offline and matches the version that shipped this skill: try `npx --no-install @blazity-atlas/core doctor` first, and fall back to the published package only when the repository does not have one installed:
 
 ```bash
 npx --yes @blazity-atlas/core@latest doctor
 ```
+
+If a fix run rewrites files under the workspace skills directory (a newer published version landed), re-read this skill file before continuing.
 
 Then follow the CLI result:
 
@@ -113,7 +115,7 @@ Resolve every path through the config from Phase 2 — never hardcode `.ai/`.
 2. As the final act of setup, flip `setupState` in `<root>/config.json` from `"scaffolded"` to `"configured"`. No other write may follow this flip.
 3. Show a concise summary: files written and unknowns left.
 4. Suggest a commit of the setup result.
-5. Offer one first-value proof: answer one nontrivial question about the repository using only workspace content.
+5. Offer one first-value proof: answer one nontrivial question about the repository using only workspace content — in a fresh agent context (spawn a subagent restricted to AGENTS.md and the workspace when available; otherwise quote the exact workspace passages used). Cite the files the answer came from. The same context window that just wrote the files does not count as proof.
 
 After setup completes, reviews of AI tools and AI-assisted changes run through the sibling `atlas-review` skill.
 

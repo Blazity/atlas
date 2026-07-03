@@ -17,13 +17,19 @@ Run the phases below in order.
 
 Before inspecting repository meaning, announce the deterministic setup steps you are about to run.
 
-From the repository root, run the Atlas CLI. Prefer a locally installed copy so the run works offline and matches the version that shipped this skill: try `npx --no-install @blazity-atlas/core doctor` first, and fall back to the published package only when the repository does not have one installed:
+From the repository root, run the Atlas CLI. Prefer a locally installed copy so the run works offline and matches the version that shipped this skill:
+
+```bash
+npx --no-install @blazity-atlas/core doctor
+```
+
+Fall back to the published package only when that fails because the package is not installed locally (npx cannot find it — not when doctor itself reports findings):
 
 ```bash
 npx --yes @blazity-atlas/core@latest doctor
 ```
 
-If a fix run rewrites files under the workspace skills directory (a newer published version landed), re-read this skill file before continuing.
+Use the same preference for every CLI command below. If a fix run rewrites files under the workspace skills directory (a newer published version landed), re-read this skill file before continuing.
 
 Then follow the CLI result:
 

@@ -87,7 +87,9 @@ The exit codes are a frozen contract:
 | `1` | Fixable drift — `atlas doctor --fix` repairs it deterministically |
 | `2` | Manual conflicts that need a human |
 
-Advisories (setup pending, empty memory) inform and never fail a build. `doctor --json` emits the findings as structured data for scripting. Pin the version rather than `@latest`: managed skill files are byte-compared, so upgrading the package and running `doctor --fix` belong in the same change.
+Advisories (setup pending, empty memory, oversized context) inform and never fail a build. `doctor --json` emits the findings as structured data for scripting. Pin the version rather than `@latest`: managed skill files are byte-compared, so upgrading the package and running `doctor --fix` belong in the same change.
+
+Context-size advisories watch the files agents actually load — `AGENTS.md`, `CLAUDE.md`, vocabulary, memory, decisions, managed skills — against heuristic character budgets informed by documented agent caps (for example, Codex reads at most 32 KiB of project docs by default). They are hints to compact, not model limits. When one fires, `atlas doctor --handoff context-size` prints a safe cleanup prompt for any agent, and the `atlas-compact` managed skill runs the full loop: measure with the CLI, propose a per-file plan, apply approved edits, re-run `doctor` for before/after proof.
 
 ## Reviews that leave a verdict
 

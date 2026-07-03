@@ -27,6 +27,7 @@ test("packed CLI initializes and doctors a temp repo", async () => {
     const skill = await readFile(path.join(repo, ".ai/skills/atlas-setup/SKILL.md"), "utf8");
     const customization = await readFile(path.join(repo, ".ai/skills/atlas-setup/customization.md"), "utf8");
     const reviewSkill = await readFile(path.join(repo, ".ai/skills/atlas-review/SKILL.md"), "utf8");
+    const compactSkill = await readFile(path.join(repo, ".ai/skills/atlas-compact/SKILL.md"), "utf8");
 
     assert.match(init.stdout, /Atlas init/);
     assert.match(doctor.stdout, /No issues found/);
@@ -36,6 +37,7 @@ test("packed CLI initializes and doctors a temp repo", async () => {
     assert.match(skill, /customization\.md/);
     assert.match(customization, /Atlas Customization/);
     assert.match(reviewSkill, /name: atlas-review/);
+    assert.match(compactSkill, /name: atlas-compact/);
   } finally {
     if (tarball) {
       await rm(tarball, { force: true });

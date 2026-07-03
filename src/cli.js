@@ -3,11 +3,12 @@ import { readFileSync } from "node:fs";
 import { classifyFindings, collectDoctorFindings, applyFixes, discoverWorkspaceRoot } from "./doctor.js";
 import { runInit } from "./init.js";
 import { configPath, getTemplateNames, workspaceRootError } from "./config.js";
+import { buildContextSizeHandoffPrompt } from "./context-size.js";
 import { exitCodeForFindings, formatFindings } from "./output.js";
 import { describeDirtyStatus, fileExists, gitStatus, isGitRepo } from "./repo.js";
 import { detectMode } from "./ui/runtime.js";
 import { runInteractiveInit } from "./ui/flow.js";
-import { colorizeDoctorOutput, doctorMark } from "./ui/doctor.js";
+import { colorizeDoctorOutput, doctorMark, offerContextSizeHandoff } from "./ui/doctor.js";
 
 const packageVersion = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
 const initFlags = ["dry-run", "force", "yes", "ci", "here", "template", "root"];
@@ -56,7 +57,7 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
   }
 
   if (parsed.command === "doctor") {
-    const validation = validateFlags(parsed.flags, ["fix", "force", "json"]);
+    const validation = validateFlags(parsed.flags, ["fix", "force", "json", "handoff"]);
     if (validation) {
       return usageError(validation);
     }
@@ -64,21 +65,57 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
     if (parsed.flags.has("json") && parsed.flags.has("fix")) {
       return usageError("Cannot combine --json with --fix");
     }
+    if (parsed.flags.has("handoff") && parsed.flags.has("fix")) {
+      return usageError("Cannot combine --handoff with --fix");
+    }
+    if (parsed.flags.has("handoff") && parsed.flags.has("json")) {
+      return usageError("Cannot combine --handoff with --json");
+    }
+    if (parsed.flags.has("handoff") && parsed.flags.get("handoff") !== "context-size") {
+      return usageError("Unsupported handoff topic: use --handoff context-size");
+    }
 
     if (!(await isGitRepo(cwd))) {
       return { exitCode: 2, stdout: "", stderr: "Refusing to inspect: current directory is not a git repository.\n" };
     }
 
-    const findings = await collectDoctorFindings(cwd);
+    const diagnostics = options.diagnostics ?? {};
+    const findings = await collectDoctorFindings(cwd, { diagnostics });
 
     if (parsed.flags.has("json")) {
       const exitCode = exitCodeForFindings(findings);
       const payload = {
         classification: classifyFindings(findings),
         exitCode,
-        findings: findings.map(({ code, message, severity, fixable }) => ({ code, message, severity, fixable }))
+        findings: findings.map(({ code, message, severity, fixable, details }) =>
+          details ? { code, message, severity, fixable, details } : { code, message, severity, fixable })
       };
       return { exitCode, stdout: `${JSON.stringify(payload, null, 2)}\n`, stderr: "" };
+    }
+
+    // --handoff prints a prompt, not a drift report: exit 0 whenever the print
+    // succeeds, so scripts can capture the prompt without re-deriving doctor's
+    // own gate. Repos that cannot be handed off fail loudly instead.
+    if (parsed.flags.has("handoff")) {
+      if (classifyFindings(findings) === "manual") {
+        return { exitCode: 2, stdout: "", stderr: "Cannot hand off: doctor found manual conflicts. Run atlas doctor first.\n" };
+      }
+      if (classifyFindings(findings) === "fixable" && !(await workspaceInitialized(cwd))) {
+        return {
+          exitCode: 1,
+          stdout: "Atlas doctor handoff\n\nAtlas is not set up in this repository.\nRun: npx --yes @blazity-atlas/core@latest init\n",
+          stderr: ""
+        };
+      }
+      const report = diagnostics.contextSizeReport;
+      const prompt = report?.hasRisk ? buildContextSizeHandoffPrompt(report) : null;
+      return {
+        exitCode: 0,
+        stdout: prompt
+          ? `Atlas doctor handoff\n\n${prompt}\n`
+          : "Atlas doctor handoff\n\nNo context-size advisory found. No handoff needed.\n",
+        stderr: ""
+      };
     }
 
     if (parsed.flags.has("fix")) {
@@ -168,14 +205,20 @@ export async function main() {
       return;
     }
 
-    if (parsed.command === "doctor" && !wantsPlainPath && mode.interactive && !parsed.flags.has("json")) {
+    if (parsed.command === "doctor" && !wantsPlainPath && mode.interactive && !parsed.flags.has("json") && !parsed.flags.has("handoff")) {
       process.stdout.write(`${doctorMark({ color: mode.color })}\n\n`);
-      const doctorResult = await runCli(argv);
+      const diagnostics = {};
+      const doctorResult = await runCli(argv, { diagnostics });
       if (doctorResult.stdout) {
         process.stdout.write(colorizeDoctorOutput(doctorResult.stdout, { color: mode.color }));
       }
       if (doctorResult.stderr) {
         process.stderr.write(doctorResult.stderr);
+      }
+      // Offer only on clean runs: exit 0 implies an initialized workspace with
+      // no drift to fix first, and --fix output reports pre-fix sizes anyway.
+      if (doctorResult.exitCode === 0 && !parsed.flags.has("fix") && diagnostics.contextSizeReport?.hasRisk) {
+        await offerContextSizeHandoff(buildContextSizeHandoffPrompt(diagnostics.contextSizeReport));
       }
       process.exitCode = doctorResult.exitCode;
       return;
@@ -212,7 +255,7 @@ function writeUsageError(message) {
   process.exitCode = 2;
 }
 
-const valueFlags = new Set(["template", "root"]);
+const valueFlags = new Set(["template", "root", "handoff"]);
 
 function parseArgs(argv) {
   const flags = new Map();
@@ -290,7 +333,7 @@ function helpText() {
 
 Usage:
   atlas init [--dry-run] [--force] [--yes] [--ci] [--here] [--template <name>] [--root <dir>]
-  atlas doctor [--fix] [--force] [--json]
+  atlas doctor [--fix] [--force] [--json] [--handoff context-size]
   atlas --version
 
 Commands:
@@ -298,6 +341,9 @@ Commands:
   doctor        Inspect the Atlas workspace for drift; reports fixable and
                 manual issues plus a non-blocking Advisory section
   doctor --fix  Apply safe deterministic repairs reported by doctor
+  doctor --handoff context-size
+                Print a safe agent prompt for context-size cleanup; exits 0
+                when the prompt (or a no-op notice) is printed
 
 Options:
   --root <dir>       Workspace root for init (repo-relative; default .ai)
@@ -310,6 +356,8 @@ Options:
                      (deliberate nested workspace, e.g. a monorepo package)
   --ci               Force the non-interactive path (also implied by CI=1)
   --json             doctor only: print findings as JSON
+  --handoff <topic>  doctor only: print an agent handoff prompt
+                     (supported topic: context-size)
   --version, -v      Print the Atlas CLI version
 
 Exit codes (frozen contract):

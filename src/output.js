@@ -27,7 +27,15 @@ export function formatFindings(findings, options = {}) {
 }
 
 function findingSection(heading, findings) {
-  return [heading, ...findings.map((finding) => `- [${finding.code}] ${finding.message}`)].join("\n");
+  return [heading, ...findings.flatMap(findingLines)].join("\n");
+}
+
+function findingLines(finding) {
+  const lines = [`- [${finding.code}] ${finding.message}`];
+  for (const detail of finding.details ?? []) {
+    lines.push(`  - ${detail}`);
+  }
+  return lines;
 }
 
 export function exitCodeForFindings(findings) {

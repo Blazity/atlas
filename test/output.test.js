@@ -16,6 +16,22 @@ test("formatFindings renders advisories as a separate trailing section", () => {
   assert.match(out, /Fixable:[\s\S]*Manual:[\s\S]*Advisory:/);
 });
 
+test("formatFindings renders finding detail lines under their finding", () => {
+  const out = formatFindings([{
+    code: "context-size",
+    message: "AI context size risk: 1 overflow",
+    severity: "advisory",
+    fixable: false,
+    details: [
+      "OVERFLOW AGENTS.md - 16,001 chars (~4,001 tokens), threshold 16,000, over by 1",
+      "Remediation: split stable detail into configured memory and decisions."
+    ]
+  }]);
+
+  assert.match(out, /^No issues found\.\n\nAdvisory:\n- \[context-size\] AI context size risk: 1 overflow\n  - OVERFLOW AGENTS\.md/m);
+  assert.match(out, /^  - Remediation: split stable detail/m);
+});
+
 test("formatFindings still reports no issues when only advisories exist", () => {
   const out = formatFindings([advisoryFinding]);
 

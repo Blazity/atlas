@@ -57,6 +57,15 @@ export function defaultMemoryReadme() {
   ].join("\n");
 }
 
+// Canonical manifest of managed skill files. doctor's per-skill drift checks
+// and the context-size scan must both cover exactly this set.
+export const managedSkillFiles = [
+  ["atlas-setup", "SKILL.md"],
+  ["atlas-setup", "customization.md"],
+  ["atlas-review", "SKILL.md"],
+  ["atlas-compact", "SKILL.md"]
+];
+
 export function defaultSetupSkillMd() {
   return readPackagedSkillFile("atlas-setup/SKILL.md");
 }
@@ -67,6 +76,10 @@ export function defaultCustomizationMd() {
 
 export function defaultReviewSkillMd() {
   return readPackagedSkillFile("atlas-review/SKILL.md");
+}
+
+export function defaultCompactSkillMd() {
+  return readPackagedSkillFile("atlas-compact/SKILL.md");
 }
 
 function readPackagedSkillFile(relativePath) {

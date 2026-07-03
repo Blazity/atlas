@@ -1,7 +1,7 @@
 {
   "name": "@blazity-atlas/core",
   "version": "0.3.0",
-  "description": "One command scaffolds the AGENTS.md, repo memory, and vocabulary every coding agent shares (Claude Code, Cursor, Codex) — then atlas doctor verifies the structure in CI with frozen exit codes.",
+  "description": "One command scaffolds the AGENTS.md, documentation structure, and repo memory every coding agent shares (Claude Code, Cursor, Codex) — and atlas doctor keeps that structure verified in CI with frozen exit codes.",
   "keywords": [
     "agents-md",
     "agents.md",

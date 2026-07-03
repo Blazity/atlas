@@ -10,8 +10,8 @@
 <h1 align="center">Atlas — repo-owned AI context for coding agents</h1>
 
 <p align="center">
-  One command scaffolds the AGENTS.md, repo memory, and vocabulary every coding agent shares —<br>
-  and <code>atlas doctor</code> verifies the structure in CI with frozen exit codes.
+  One command gives every coding agent the same documentation structure, repo memory, and AGENTS.md —<br>
+  and <code>atlas doctor</code> keeps that structure verified in CI with frozen exit codes.
 </p>
 
 <p align="center">
@@ -25,13 +25,14 @@
 
 Every coding agent forgets your repo between sessions, and every tool wants its own config file. You re-explain the architecture, the vocabulary, the "don't touch that" list — per agent, per session, forever.
 
-Atlas (by [Blazity](https://blazity.com)) gives the repository one place for all of it: a plain-files workspace that Claude Code, Codex, Cursor, and anything that reads [AGENTS.md](https://agents.md) share — committed to git, reviewable in PRs, and checked for drift by a deterministic CLI.
+Atlas (by [Blazity](https://blazity.com)) gives the repository one place for all of it: a unified documentation structure and plain-files workspace that Claude Code, Codex, Cursor, and anything that reads [AGENTS.md](https://agents.md) share — committed to git, reviewable in PRs, and checked for drift by a deterministic CLI.
 
 - ⚡ **One command** — `npx @blazity-atlas/core init` scaffolds AGENTS.md, CLAUDE.md, and a complete `.ai/` workspace
+- 🗂️ **One structure for everything** — plans, research, decisions, ADRs, memory, vocabulary, and review verdicts in predictable, config-defined locations
 - 🤝 **Every agent, one context** — Claude Code, Cursor, Codex, Copilot, and Gemini CLI share the same repo-owned files
-- 🧠 **Memory that compounds** — vocabulary, decisions, plans, lessons, and review verdicts accumulate as plain committed files
-- 🩺 **Machine-checked** — `atlas doctor` verifies the structure in CI with frozen exit codes; `--fix` repairs drift deterministically
+- 🧩 **Plays well with skills** — third-party and custom skills route their documentation output through `.ai/config.json` instead of inventing new folders
 - 📦 **Builds on what you have** — config-driven path aliases adopt your existing docs folders instead of replacing them
+- 🩺 **Machine-checked** — `atlas doctor` verifies the structure in CI with frozen exit codes; `--fix` repairs drift deterministically
 - 🔒 **Nothing leaves your repo** — no telemetry, no network calls, one dependency, plain files only
 
 ## Quickstart
@@ -56,9 +57,11 @@ These are behaviors you can verify in two minutes, not promises:
 - **Previewable.** `init --dry-run` shows every planned write and touches nothing.
 - **Plain files only.** No database, no daemon, no network calls. Uninstall = delete the workspace directory, the managed block in `AGENTS.md`, and three symlinks.
 
-## What accumulates
+## One structure, everything in it
 
 The scaffold is the boring part. The point is what collects in it as you work: plans, research, ADRs, vocabulary, memory, and review verdicts — in predictable locations agents resolve through `.ai/config.json`, instead of dissolving into chat history.
+
+That routing is not Atlas-only. The managed block Atlas writes into `AGENTS.md` tells any agent — and any skill it runs, third-party or custom — to resolve artifact destinations through the config before writing. A planning skill's plan lands in the plans directory, a research skill's report in research, a review's verdict in results: one tree, no matter which tool wrote it.
 
 This repository runs on Atlas. Its own workspace is the demo:
 

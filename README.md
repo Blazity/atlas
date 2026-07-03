@@ -186,7 +186,7 @@ The CLI runs locally, makes no network calls at runtime, sends no telemetry, and
 
 **Custom workspace root?** `init` asks (or `--root docs/ai`); a one-line `.atlas` pointer file at the repo root makes it discoverable. The default `.ai` needs no pointer.
 
-**Windows?** Unverified: the agent-surface symlinks likely require Developer Mode or elevation. CI runs an observational Windows job; treat Windows as unsupported until it's green.
+**Windows?** Untested — the agent-surface symlinks likely require Developer Mode or elevation. Use macOS or Linux for now.
 
 **Does it phone home?** No. See [Privacy](#privacy).
 
@@ -194,7 +194,7 @@ The CLI runs locally, makes no network calls at runtime, sends no telemetry, and
 
 ## Requirements
 
-Node.js ≥ 20 and a git repository. macOS and Linux supported; Windows observational (see FAQ).
+Node.js ≥ 20 and a git repository. macOS and Linux supported; Windows untested (see FAQ).
 
 ## Built with Atlas
 

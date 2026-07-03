@@ -10,7 +10,7 @@ Mode: Gate. Scope: the developer-adoption change set (first-run CLI fixes, `--ve
   2. The README CI recipe pins `0.3.0`; bump the pinned version in the same change that publishes `0.4.0`. Cleared by: package maintainer.
   3. This release edits managed skill content (`atlas-setup/SKILL.md`), so consumer `doctor` runs will report fixable drift once upgraded — the CHANGELOG must state that `doctor --fix` after upgrade is expected. Cleared by: package maintainer.
 - **open questions**:
-  - Windows symlink behavior is unverified; the CI Windows job is observational (`continue-on-error`). Treat Windows as unsupported until that leg is green.
+  - Windows symlink behavior is unverified and out of CI scope for now; the README documents Windows as untested. Revisit if Windows demand shows up in issues.
   - The `.cursor/skills` and `.agents/skills` symlink surfaces have no verified native consumer; README describes them as provided conveniences, not integrations. Revisit when consumer behavior is confirmed.
 - **evidence** (inspected first-hand, this worktree):
   - `npm test`: 161/161 pass, 0 fail.
@@ -19,7 +19,7 @@ Mode: Gate. Scope: the developer-adoption change set (first-run CLI fixes, `--ve
   - `node bin/atlas.js doctor` on this repository: no issues found.
   - `git diff --check`: clean.
 - **approval boundaries**: a human approves the pull request before merge and runs `npm publish` manually; no automated publishing exists. Post-release, humans review consumer-facing drift reports through the issue forms (bug form collects `atlas doctor` output).
-- **monitoring plan**: CI on every push/PR (test matrix + dogfooded local `doctor`); npm download and GitHub issue signals reviewed at the next release; the observational Windows CI leg gathers platform evidence.
+- **monitoring plan**: CI on every push/PR (test suite + dogfooded local `doctor` on one environment); npm download and GitHub issue signals reviewed at the next release.
 - **owner**: package maintainer (Atlas Core).
 - **next review date**: at the `0.4.0` publish, or 2026-08-01, whichever is sooner.
 

@@ -23,8 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from a missing one.
 - Language and memory scaffolds ship one marked example entry each; init
   output ends with a commit nudge and both Claude Code invocations.
-- CI workflow (ubuntu/macos matrix, observational Windows leg), issue forms,
-  PR template, CONTRIBUTING.md, SECURITY.md.
+- CI workflow running the test suite and the dogfooded local `doctor`,
+  issue forms, PR template, CONTRIBUTING.md, SECURITY.md.
 - npm keywords, benefit-first package and plugin descriptions,
   `blazity-atlas` bin alias, homepage and bugs metadata.
 

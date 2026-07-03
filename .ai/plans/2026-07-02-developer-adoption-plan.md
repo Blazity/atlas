@@ -50,7 +50,7 @@
 
 ### Trust and community surface
 
-- [x] 22. GitHub Actions CI: test suite + dogfooded local `doctor` on ubuntu/macos (Node 20/22); windows leg observational (`continue-on-error`) to gather symlink evidence before claiming support.
+- [x] 22. GitHub Actions CI: test suite + dogfooded local `doctor` on one environment (ubuntu, Node 20). An OS/Node matrix with an observational Windows leg was tried first and descoped as overkill; Windows stays documented as untested.
 - [x] 23. `CONTRIBUTING.md` (local CLI only, full test suite before commit, conventional commits), issue forms (bug form asks for `atlas doctor` output + OS/Node), PR template.
 - [x] 24. `SECURITY.md` with a private reporting channel and supported-versions note.
 - [x] 25. `CHANGELOG.md` covering 0.2.0 → unreleased.
@@ -81,7 +81,7 @@
 - Lightweight review profile in `atlas-review` (inspection-first quick mode with a short artifact) so solo developers produce verdicts, not only enterprise flows.
 - `atlas status` (with `--json`): one-screen workspace dashboard once workspaces have content worth showing.
 - Managed-skill drift model: distinguish "edited locally" from "behind published version" (needs an ADR; byte-equality redesign).
-- Windows support decision driven by the observational CI leg's evidence.
+- Windows support if demand shows up in issues. One CI run already produced the failure signature to start from: `readlink` returns backslashed link targets that never match the expected POSIX form, so `doctor` reports permanent drift after `init`.
 - Doctor validation of review-verdict artifacts once real artifacts exist and the format is pinned.
 - Sandbox template repository ("try Atlas without touching your repo") with a matured workspace and devcontainer.
 - Release workflow with npm provenance attestation.

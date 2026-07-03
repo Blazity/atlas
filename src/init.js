@@ -1,5 +1,5 @@
 import { applyFixes, loadConfig } from "./doctor.js";
-import { gitStatus, isGitRepo } from "./repo.js";
+import { describeDirtyStatus, gitStatus, isGitRepo, isRepoSubdirectory } from "./repo.js";
 import { formatApplied, formatFindings } from "./output.js";
 import { normalizePath } from "./config.js";
 import { buildPlan } from "./plan.js";
@@ -9,6 +9,22 @@ export async function runInit(options) {
   const cwd = options.cwd;
   if (!(await isGitRepo(cwd))) {
     return { exitCode: 2, stdout: "", stderr: "Refusing to initialize: current directory is not a git repository.\n" };
+  }
+
+  if (!options.here) {
+    const location = await isRepoSubdirectory(cwd);
+    if (location.subdirectory) {
+      return {
+        exitCode: 2,
+        stdout: "",
+        stderr: [
+          "Refusing to initialize in a repository subdirectory.",
+          `Repository root: ${location.toplevel}`,
+          "Run atlas init from the repository root, or pass --here to scaffold a nested workspace on purpose.",
+          ""
+        ].join("\n")
+      };
+    }
   }
 
   const root = await resolveRequestedRoot(cwd, options.root);
@@ -24,7 +40,7 @@ export async function runInit(options) {
       return {
         exitCode: 2,
         stdout: "",
-        stderr: "Refusing to initialize with a dirty git worktree. Commit/stash changes or pass --force.\n"
+        stderr: `Refusing to initialize with a dirty git worktree. Commit/stash changes or pass --force.\n${describeDirtyStatus(status)}\n`
       };
     }
   }

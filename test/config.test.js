@@ -20,8 +20,8 @@ test("creates the default config with root-relative paths and aliases", () => {
   assert.equal(config.artifactRoot, ".ai");
   assert.equal(config.paths.plans, "plans");
   assert.equal(config.paths.adrs, "decisions/adrs");
-  assert.equal(config.pathAliases["docs/superpowers/plans"], "plans");
-  assert.equal(config.pathAliases["docs/superpowers"], undefined);
+  assert.equal(config.pathAliases["docs/plans"], "plans");
+  assert.equal(config.pathAliases["docs/superpowers/plans"], undefined);
 });
 
 test("creates deterministic configs for supported templates", () => {
@@ -112,7 +112,7 @@ test("resolves alias destinations while preserving nested filenames", () => {
   const config = createDefaultConfig();
 
   assert.equal(
-    resolveAliasDestination(config, "docs/superpowers/plans/2026-05-18-plan.md"),
+    resolveAliasDestination(config, "docs/plans/2026-05-18-plan.md"),
     ".ai/plans/2026-05-18-plan.md"
   );
   assert.equal(resolveAliasDestination(config, "docs/unknown/file.md"), null);

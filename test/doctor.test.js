@@ -50,8 +50,7 @@ test("init creates a clean harness and is idempotent", async () => {
     assert.match(second.stdout, /Already up to date/);
     assert.doesNotMatch(first.stdout, /^Fixable:$/m);
     assert.match(first.stdout, /setup/);
-    assert.match(first.stdout, /Claude Code: run \/atlas:atlas-setup/);
-    assert.match(first.stdout, /\/atlas:atlas-setup/);
+    assert.match(first.stdout, /Claude Code: run \/atlas-setup \(or \/atlas:atlas-setup with the Atlas plugin\)/);
     assert.match(configAfterFirstRun, /"schemaVersion": 1/);
     assert.match(skillAfterFirstRun, /name: atlas-setup/);
     assert.match(skillAfterFirstRun, /Deterministic Bootstrap/);
@@ -173,26 +172,26 @@ test("doctor --fix moves files from explicit alias roots", async () => {
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });
     await commitAll(directory, "initialize harness");
-    await mkdir(path.join(directory, "docs/superpowers/plans"), { recursive: true });
-    await writeFile(path.join(directory, "docs/superpowers/plans/example.md"), "# Plan\n");
+    await mkdir(path.join(directory, "docs/plans"), { recursive: true });
+    await writeFile(path.join(directory, "docs/plans/example.md"), "# Plan\n");
     await commitAll(directory, "add legacy plan");
 
     const before = await runCli(["doctor"], { cwd: directory });
     const fix = await runCli(["doctor", "--fix"], { cwd: directory });
 
     assert.equal(before.exitCode, 1);
-    assert.match(before.stdout, /docs\/superpowers\/plans\/example.md/);
+    assert.match(before.stdout, /docs\/plans\/example.md/);
     assert.equal(fix.exitCode, 0);
     assert.equal(await readFile(path.join(directory, ".ai/plans/example.md"), "utf8"), "# Plan\n");
-    await assert.rejects(stat(path.join(directory, "docs/superpowers/plans/example.md")), /ENOENT/);
+    await assert.rejects(stat(path.join(directory, "docs/plans/example.md")), /ENOENT/);
   });
 });
 
 test("doctor --fix reports alias target collisions as manual", async () => {
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });
-    await mkdir(path.join(directory, "docs/superpowers/plans"), { recursive: true });
-    await writeFile(path.join(directory, "docs/superpowers/plans/example.md"), "legacy\n");
+    await mkdir(path.join(directory, "docs/plans"), { recursive: true });
+    await writeFile(path.join(directory, "docs/plans/example.md"), "legacy\n");
     await writeFile(path.join(directory, ".ai/plans/example.md"), "canonical\n");
 
     const result = await runCli(["doctor", "--fix"], { cwd: directory });
@@ -226,14 +225,14 @@ test("doctor --fix refuses to mutate a dirty worktree unless forced", async () =
     await runCli(["init"], { cwd: directory });
     await commitAll(directory, "initialize harness");
     await writeFile(path.join(directory, "unrelated.txt"), "dirty\n");
-    await mkdir(path.join(directory, "docs/superpowers/plans"), { recursive: true });
-    await writeFile(path.join(directory, "docs/superpowers/plans/example.md"), "# Plan\n");
+    await mkdir(path.join(directory, "docs/plans"), { recursive: true });
+    await writeFile(path.join(directory, "docs/plans/example.md"), "# Plan\n");
 
     const refused = await runCli(["doctor", "--fix"], { cwd: directory });
 
     assert.equal(refused.exitCode, 2);
     assert.match(refused.stderr, /dirty git worktree/);
-    assert.equal(await readFile(path.join(directory, "docs/superpowers/plans/example.md"), "utf8"), "# Plan\n");
+    assert.equal(await readFile(path.join(directory, "docs/plans/example.md"), "utf8"), "# Plan\n");
 
     const forced = await runCli(["doctor", "--fix", "--force"], { cwd: directory });
 
@@ -245,14 +244,14 @@ test("doctor --fix refuses to mutate a dirty worktree unless forced", async () =
 test("doctor rejects unknown flags instead of ignoring a dry-run typo", async () => {
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });
-    await mkdir(path.join(directory, "docs/superpowers/plans"), { recursive: true });
-    await writeFile(path.join(directory, "docs/superpowers/plans/example.md"), "# Plan\n");
+    await mkdir(path.join(directory, "docs/plans"), { recursive: true });
+    await writeFile(path.join(directory, "docs/plans/example.md"), "# Plan\n");
 
     const result = await runCli(["doctor", "--fix", "--dry-run"], { cwd: directory });
 
     assert.equal(result.exitCode, 2);
     assert.match(result.stderr, /Unknown option: --dry-run/);
-    assert.equal(await readFile(path.join(directory, "docs/superpowers/plans/example.md"), "utf8"), "# Plan\n");
+    assert.equal(await readFile(path.join(directory, "docs/plans/example.md"), "utf8"), "# Plan\n");
   });
 });
 
@@ -418,7 +417,7 @@ test("doctor migrates a legacy AI-HARNESS managed block to the ATLAS namespace",
     const agents = await readFile(path.join(directory, "AGENTS.md"), "utf8");
 
     assert.equal(before.exitCode, 1);
-    assert.match(before.stdout, /missing-managed-block/);
+    assert.match(before.stdout, /stale-managed-block/);
     assert.equal(fix.exitCode, 0);
     assert.equal((agents.match(/BEGIN ATLAS: artifact-paths/g) ?? []).length, 1);
     assert.equal((agents.match(/BEGIN AI-HARNESS/g) ?? []).length, 0);
@@ -505,23 +504,29 @@ test("doctor --fix is never blocked by advisories and never touches them", async
   });
 });
 
-test("doctor reports empty vocabulary and memory as advisories until they gain content", async () => {
+test("doctor reports placeholder vocabulary and empty memory as advisories until they gain content", async () => {
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });
 
     const before = await runCli(["doctor"], { cwd: directory });
 
     assert.equal(before.exitCode, 0);
-    assert.match(before.stdout, /\[empty-language\]/);
+    assert.match(before.stdout, /\[unresolved-placeholder\] \.ai\/LANGUAGE\.md/);
     assert.match(before.stdout, /\[empty-memory\]/);
 
     const language = await readFile(path.join(directory, ".ai/LANGUAGE.md"), "utf8");
-    await writeFile(path.join(directory, ".ai/LANGUAGE.md"), `${language}| Atlas | The standard | framework |\n`);
+    const filled = language
+      .split("\n")
+      .filter((line) => !line.includes("<!-- TODO"))
+      .concat("| Atlas | The standard | framework |")
+      .join("\n");
+    await writeFile(path.join(directory, ".ai/LANGUAGE.md"), `${filled}\n`);
     await writeFile(path.join(directory, ".ai/memory/product.md"), "# Product\n");
 
     const after = await runCli(["doctor"], { cwd: directory });
 
     assert.equal(after.exitCode, 0);
+    assert.doesNotMatch(after.stdout, /unresolved-placeholder/);
     assert.doesNotMatch(after.stdout, /empty-language/);
     assert.doesNotMatch(after.stdout, /empty-memory/);
   });

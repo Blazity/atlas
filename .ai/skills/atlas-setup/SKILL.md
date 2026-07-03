@@ -9,7 +9,7 @@ description: Use when a repository needs Atlas setup, repair/update, AGENTS.md r
 
 Use this skill for first setup and later refreshes. The published CLI owns deterministic structure; this skill owns semantic repository understanding.
 
-Humans and agents use the same deterministic entrypoint. Do not reimplement `init`, `doctor`, path repair, symlink repair, or managed file repair inside this skill. Call the CLI through `npx`.
+Humans and agents use the same deterministic entrypoint. Do not reimplement `init`, `doctor`, path repair, symlink repair, or managed file repair inside this skill. Call the CLI through `npx`, preferring a locally installed `@blazity-atlas/core` (`npx --no-install @blazity-atlas/core …`) and falling back to the published package only when none is installed. Every `npx --yes @blazity-atlas/core@latest …` command in this skill is the fallback spelling of that rule, not an instruction to skip the local copy.
 
 Run the phases below in order.
 
@@ -17,11 +17,19 @@ Run the phases below in order.
 
 Before inspecting repository meaning, announce the deterministic setup steps you are about to run.
 
-From the repository root, run:
+From the repository root, run the Atlas CLI. Prefer a locally installed copy so the run works offline and matches the version that shipped this skill:
+
+```bash
+npx --no-install @blazity-atlas/core doctor
+```
+
+Fall back to the published package only when that fails because the package is not installed locally (npx cannot find it — not when doctor itself reports findings):
 
 ```bash
 npx --yes @blazity-atlas/core@latest doctor
 ```
+
+If a fix run rewrites files under the workspace skills directory (a newer published version landed), re-read this skill file before continuing.
 
 Then follow the CLI result:
 
@@ -113,7 +121,7 @@ Resolve every path through the config from Phase 2 — never hardcode `.ai/`.
 2. As the final act of setup, flip `setupState` in `<root>/config.json` from `"scaffolded"` to `"configured"`. No other write may follow this flip.
 3. Show a concise summary: files written and unknowns left.
 4. Suggest a commit of the setup result.
-5. Offer one first-value proof: answer one nontrivial question about the repository using only workspace content.
+5. Offer one first-value proof: answer one nontrivial question about the repository using only workspace content — in a fresh agent context (spawn a subagent restricted to AGENTS.md and the workspace when available; otherwise quote the exact workspace passages used). Cite the files the answer came from. The same context window that just wrote the files does not count as proof.
 
 After setup completes, reviews of AI tools and AI-assisted changes run through the sibling `atlas-review` skill.
 

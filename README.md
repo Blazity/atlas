@@ -7,33 +7,108 @@
   </a>
 </p>
 
+<h1 align="center">Atlas — repo-owned AI context for coding agents</h1>
+
 <p align="center">
-  <a href="https://blazity.com/atlas"><img alt="Atlas" src="https://img.shields.io/badge/Atlas-Governed_AI_Engineering-FD6027?style=for-the-badge"></a>
-  <img alt="Self hosted" src="https://img.shields.io/badge/self--hosted-ready-181B20?style=for-the-badge">
-  <img alt="Open source" src="https://img.shields.io/badge/open_source-standard-BBED80?style=for-the-badge&labelColor=181B20">
+  One command gives every coding agent the same documentation structure, repo memory, and AGENTS.md —<br>
+  and <code>atlas doctor</code> keeps that structure verified in CI with frozen exit codes.
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/@blazity-atlas/core"><img alt="npm version" src="https://img.shields.io/npm/v/%40blazity-atlas%2Fcore"></a>
+  <a href="https://github.com/Blazity/atlas/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Blazity/atlas/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="package.json"><img alt="node >=20" src="https://img.shields.io/node/v/%40blazity-atlas%2Fcore"></a>
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/npm/l/%40blazity-atlas%2Fcore"></a>
 </p>
 
 ---
 
-**Coding agents are only as good as the context your repository gives them.**
+Every coding agent forgets your repo between sessions, and every tool wants its own config file. You re-explain the architecture, the vocabulary, the "don't touch that" list — per agent, per session, forever.
 
-Atlas makes that context structured, durable, and machine-checked. One command scaffolds the shared instructions, repo memory, artifact paths, and managed skills agents need — plus two kinds of gates: structural gates that keep the workspace sound and process gates that turn reviews into recorded verdicts.
+Atlas (by [Blazity](https://blazity.com)) gives the repository one place for all of it: a unified documentation structure and plain-files workspace that Claude Code, Codex, Cursor, and anything that reads [AGENTS.md](https://agents.md) share — committed to git, reviewable in PRs, and checked for drift by a deterministic CLI.
 
-The payoff compounds over time. You keep working normally, while Atlas turns useful project context into documentation that grows with the repo and makes each next agent run more effective.
+- ⚡ **One command** — `npx @blazity-atlas/core init` scaffolds AGENTS.md, CLAUDE.md, and a complete `.ai/` workspace
+- 🗂️ **One structure for everything** — plans, research, decisions, ADRs, memory, vocabulary, and review verdicts in predictable, config-defined locations
+- 🤝 **Every agent, one context** — Claude Code, Cursor, Codex, Copilot, and Gemini CLI share the same repo-owned files
+- 🧩 **Plays well with skills** — third-party and custom skills route their documentation output through `.ai/config.json` instead of inventing new folders
+- 📦 **Builds on what you have** — config-driven path aliases adopt your existing docs folders instead of replacing them
+- 🩺 **Machine-checked** — `atlas doctor` verifies the structure in CI with frozen exit codes; `--fix` repairs drift deterministically
+- 🔒 **Nothing leaves your repo** — no telemetry, no network calls, one dependency, plain files only
 
-Atlas creates the deterministic structure, then hands the rest to your local agent so it can inspect the repository and finish the setup with project-specific context.
-
-## Start Here
+## Quickstart
 
 ```bash
 npx --yes @blazity-atlas/core@latest init
 ```
 
-Atlas first asks where the workspace should live — default `.ai`, any repo-relative path works — then previews the files it wants to write, asks for confirmation in an interactive terminal, creates the workspace and agent entrypoints, and prints the next prompt to give your coding agent. If it detects an agent CLI on your machine (`claude`, `codex`, `cursor-agent`), it can offer to launch it with that prompt directly.
+<!-- TODO(maintainer): embed demo recording here — assets/atlas-demo.gif (init → handoff prompt → doctor) -->
 
-Non-interactive setups pass `--root <dir>` instead. Custom roots are discovered through a one-line `.atlas` pointer file at the repo root; the default `.ai` needs no pointer, and every example below uses it.
+One run scaffolds the workspace — config, vocabulary, memory, artifact directories, two managed skills, the AGENTS.md and CLAUDE.md entrypoints, and the agent symlinks — then prints a ready-to-paste handoff prompt. Your own coding agent takes it from there: it inspects the repository and fills the workspace with project-specific facts.
 
-Claude Code users can start from the Atlas marketplace instead:
+In a terminal, `init` runs interactively: it asks where the workspace should live (default `.ai`), previews every file before writing, and can launch a detected agent CLI (`claude`, `codex`, `cursor-agent`) with the handoff prompt.
+
+## Safe to run on an existing repo
+
+These are behaviors you can verify in two minutes, not promises:
+
+- **Refuses dirty worktrees.** `init` and `doctor --fix` stop when you have uncommitted changes (and name the offending files); `--force` is the explicit override.
+- **Preserves your content.** An existing `AGENTS.md` gets one fenced managed block appended; everything you wrote stays. Repairs never touch content outside managed blocks.
+- **Idempotent.** A second `init` prints `Already up to date — nothing to write.`
+- **Previewable.** `init --dry-run` shows every planned write and touches nothing.
+- **Plain files only.** No database, no daemon, no network calls. Uninstall = delete the workspace directory, the managed block in `AGENTS.md`, and three symlinks.
+
+## One structure, everything in it
+
+The scaffold is the boring part. The point is what collects in it as you work: plans, research, ADRs, vocabulary, memory, and review verdicts — in predictable locations agents resolve through `.ai/config.json`, instead of dissolving into chat history.
+
+That routing is not Atlas-only. The managed block Atlas writes into `AGENTS.md` tells any agent — and any skill it runs, third-party or custom — to resolve artifact destinations through the config before writing. A planning skill's plan lands in the plans directory, a research skill's report in research, a review's verdict in results: one tree, no matter which tool wrote it.
+
+This repository runs on Atlas. Its own workspace is the demo:
+
+- [`.ai/LANGUAGE.md`](.ai/LANGUAGE.md) — vocabulary with an *Avoid* column that encodes real decisions ("Template ≠ Preset", the legacy name that is banned).
+- [`.ai/memory/lessons.md`](.ai/memory/lessons.md) — earned lessons, e.g.: *"Bare managed-skill names collide in shared agent namespaces — Atlas's `review` collided with Claude Code's built-in PR-review skill in practice."*
+- [`.ai/decisions/adrs/`](.ai/decisions/adrs) — ADRs that record rejected options, not just winners.
+- [`.ai/results/`](.ai/results) — review verdicts from the `atlas-review` process gate.
+
+If your repo already keeps docs in conventional places (`docs/adrs`, `docs/specs`, …), Atlas maps them into the workspace through config-driven `pathAliases` instead of inventing a parallel documentation system — `doctor --fix` performs the moves, and the config keeps routing future writes.
+
+## `doctor` in CI
+
+```yaml
+- name: Atlas structural gate
+  run: npx --yes @blazity-atlas/core@0.3.0 doctor   # pin the version your workspace was scaffolded with
+```
+
+The exit codes are a frozen contract:
+
+| Exit | Meaning |
+| --- | --- |
+| `0` | Workspace clean — advisories never affect the exit code |
+| `1` | Fixable drift — `atlas doctor --fix` repairs it deterministically |
+| `2` | Manual conflicts that need a human |
+
+Advisories (setup pending, empty memory) inform and never fail a build. `doctor --json` emits the findings as structured data for scripting. Pin the version rather than `@latest`: managed skill files are byte-compared, so upgrading the package and running `doctor --fix` belong in the same change.
+
+## Reviews that leave a verdict
+
+The second managed skill, `atlas-review`, walks AI-assisted work through five modes — Intake, Plan, Review, Gate, Postmortem — and writes its verdict (pass / conditional pass / fail, with evidence, risks, and an owner) into `.ai/results/`, where the next agent run and the next human can find it. A review that leaves no artifact doesn't count as a review.
+
+Claude Code users run `/atlas-review`. Any other agent gets the same behavior from one instruction: *"read `.ai/skills/atlas-review/SKILL.md`"*.
+
+## Works with your agent
+
+Atlas writes the [AGENTS.md](https://agents.md) standard as its entrypoint, so most agents need zero configuration:
+
+| Agent | How it picks up Atlas |
+| --- | --- |
+| Claude Code | `CLAUDE.md` imports `AGENTS.md`; skills via `.claude/skills` symlink or the plugin |
+| Codex | Reads `AGENTS.md` natively |
+| Cursor | Reads `AGENTS.md` natively; `.cursor/skills` symlink provided |
+| GitHub Copilot | Reads `AGENTS.md` in the coding agent and VS Code |
+| Gemini CLI | One setting: `contextFileName: "AGENTS.md"` |
+| Anything else | One instruction: "read AGENTS.md, resolve paths through .ai/config.json" |
+
+Claude Code users can also install through the marketplace:
 
 ```text
 /plugin marketplace add Blazity/atlas
@@ -41,117 +116,44 @@ Claude Code users can start from the Atlas marketplace instead:
 /atlas:atlas-setup
 ```
 
-Both paths use the same published package, `@blazity-atlas/core`. The Claude Code plugin exposes the managed skills; the CLI still owns the deterministic file structure.
+## Scope and non-goals
 
-## What Atlas Adds
+Atlas Core ships two kinds of gates today:
 
-Atlas keeps AI-facing documentation small, explicit, and owned by the repository:
+- **Structural gates** — `doctor`'s deterministic workspace checks with the frozen exit codes above.
+- **Process gates** — `atlas-review`'s evidence-based verdicts, written into the workspace.
 
-```text
-.ai/
-  config.json
-  LANGUAGE.md
-  memory/
-  plans/
-  research/
-  decisions/
-  decisions/adrs/
-  results/
-  skills/atlas-setup/
-  skills/atlas-review/
-AGENTS.md
-CLAUDE.md
-.claude/skills -> ../.ai/skills
-.agents/skills -> ../.ai/skills
-.cursor/skills -> ../.ai/skills
-```
+It does **not** run your tests, evals, or policy checks (execution gates are where the standard points next, not what Core does today), it is not an agent runtime, and it does not generate code.
 
-`.ai/config.json` is the source of truth for artifact locations. If your repo already has useful docs, Atlas can map conventional paths into the `.ai/` workspace instead of inventing another documentation system.
+## Privacy
 
-## How Setup Continues
+The CLI runs locally, makes no network calls at runtime, sends no telemetry, and has exactly one dependency ([@clack/prompts](https://www.npmjs.com/package/@clack/prompts) for the interactive terminal UI). Everything it writes is a plain file in your repository. The scaffolded documentation rules also require durable artifacts to stay depersonalized — memory that is safe to commit and safe to publish.
 
-The first command only writes the shared structure. The printed prompt tells your agent to read `.ai/skills/atlas-setup/SKILL.md` and follow it. The `atlas-setup` skill then:
+## Requirements
 
-- inspects the repository before asking questions;
-- lets the agent recommend a template after reading the project — the five templates differ only in path aliases (which conventional docs folders get migrated), so the choice is low-stakes, agent-proposed, and refinable later;
-- fills `AGENTS.md`, project vocabulary, and stable memory files;
-- keeps Claude, Codex, Cursor, and similar agents pointed at one shared workspace;
-- leaves plans, decisions, research, and results in predictable locations.
-
-This keeps the human flow simple: install Atlas once, then let the local agent adapt it to the actual repository. As work continues, plans, decisions, research, and lessons accumulate where agents can find them instead of disappearing into chat history.
-
-## Reviews That Leave a Verdict
-
-Atlas manages a second skill: `atlas-review`. It walks a change through five modes — Intake, Plan, Review, Gate, and Postmortem — and writes its verdict (pass, conditional pass, or fail) as an artifact into the results path, where the next agent run can find it.
-
-Claude Code users run `/atlas:atlas-review`. Any other agent gets the same behavior from one instruction: "read `.ai/skills/atlas-review/SKILL.md`".
-
-## Why Atlas Exists
-
-AI can generate code quickly. That is no longer the hard part.
-
-The hard part is keeping the output understandable, reviewable, secure, and aligned with the system your team actually needs to run.
-
-Atlas is built for teams that want AI acceleration without giving up ownership. It brings agents into the delivery process through explicit rules, traceable artifacts, structural and process gates, and human review at the points where judgment matters.
-
-Atlas Core ships two kinds of gates today. Structural gates are `doctor`'s deterministic workspace checks, with frozen exit codes (0 clean, 1 fixable drift, 2 manual conflicts) ready for CI. Process gates are the review skill's evidence-based verdicts, written into the workspace. Execution gates — running tests, evals, and policy checks before merge — are where the standard points next, not what Core runs today.
-
-## Principles
-
-- **Ownership stays with the team.** Tools run in your repo, your cloud, or your chosen substrate.
-- **Every agent needs a gate.** Atlas Core ships structural and process gates today; execution gates — tests, evals, and policy checks running before merge — are where the standard points next.
-- **Artifacts compound.** Plans, decisions, logs, and lessons make the next run stronger.
-- **Review moves up the stack.** Humans should review architecture, adapter boundaries, risk, and product intent instead of every generated line.
-- **No black boxes.** Agent work should be traceable, auditable, and reversible.
-- **Substrates change. Systems remain.** Atlas is designed to survive model and infrastructure churn.
-
-## Useful Later
-
-Run `atlas doctor` to inspect an existing Atlas workspace for drift. Run `atlas doctor --fix` to apply safe deterministic repairs when the worktree is ready for changes.
-
-Doctor also reports advisories — setup still pending, empty vocabulary or memory. They inform you and nothing else: advisories never fail builds and never block `--fix`.
-
-### Doctor as a CI gate
-
-```yaml
-- name: Atlas structural gate
-  run: npx --yes @blazity-atlas/core@latest doctor
-```
-
-The exit codes are a frozen contract: 0 means the workspace is clean, 1 means fixable drift, 2 means conflicts that need a human — advisories never fail the build.
-
-## Explore
-
-<p>
-  <a href="https://blazity.com/atlas"><img alt="Atlas website" src="https://img.shields.io/badge/Atlas-website-FD6027?style=for-the-badge"></a>
-  <a href="https://blazity.com"><img alt="Blazity" src="https://img.shields.io/badge/Blazity-home-181B20?style=for-the-badge"></a>
-  <a href="https://github.com/Blazity"><img alt="Blazity GitHub" src="https://img.shields.io/badge/GitHub-Blazity-181717?style=for-the-badge&logo=github"></a>
-</p>
+Node.js ≥ 20 and a git repository. macOS and Linux supported; Windows untested.
 
 ## Built with Atlas
 
-Examples of projects built on the Atlas standard:
+Developed on the Atlas standard by Blazity:
 
-### Next.js Migration Plugin
+- [Atlas Eve Starter](https://github.com/Blazity/atlas-eve-starter) — starter monorepo for production-style agents
+- [Next.js Migration Plugin](https://github.com/Blazity/nextjs-migration-plugin) — website → Next.js migrations with build gates and visual verification
+- [AI Workflow](https://github.com/Blazity/ai-workflow) — issue → plan → implementation → reviewed PR agent workflows
 
-<p>
-  <img alt="Built with Atlas" src="https://img.shields.io/badge/built_with-atlas-FD6027?style=flat-square">
-  <img alt="Status: beta" src="https://img.shields.io/badge/status-beta-BBED80?style=flat-square&labelColor=181B20">
-  <img alt="GitHub stars" src="https://img.shields.io/github/stars/Blazity/nextjs-migration-plugin?style=flat-square">
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports with `atlas doctor` output are triage-ready thanks to the bracketed finding codes. Security reports go through [SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE) © [Blazity](https://blazity.com)
+
+---
+
+<p align="center">
+  <a href="https://blazity.com"><img src="https://github.com/Blazity.png" width="72" alt="Blazity"></a>
 </p>
-
-Migrate existing websites into structured Next.js projects with guided discovery, component planning, build gates, and visual verification.
-
-[Repository](https://github.com/Blazity/nextjs-migration-plugin)
-
-### AI Workflow
-
-<p>
-  <img alt="Built with Atlas" src="https://img.shields.io/badge/built_with-atlas-FD6027?style=flat-square">
-  <img alt="Status: beta" src="https://img.shields.io/badge/status-beta-BBED80?style=flat-square&labelColor=181B20">
-  <img alt="GitHub stars" src="https://img.shields.io/github/stars/Blazity/ai-workflow?style=flat-square">
+<p align="center">
+  <sub>Atlas is built and maintained by <a href="https://blazity.com">Blazity</a> — the standard behind our own AI tooling. More at <a href="https://blazity.com/atlas">blazity.com/atlas</a>.</sub>
 </p>
-
-Move software work from issue to plan, implementation, review, and pull request through governed agent workflows.
-
-[Repository](https://github.com/Blazity/ai-workflow)

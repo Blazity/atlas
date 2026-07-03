@@ -1,0 +1,48 @@
+name: Bug report
+description: Report a problem with atlas init, atlas doctor, or the scaffolded workspace
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction steps
+      description: The smallest sequence of commands that reproduces the problem.
+      placeholder: |
+        1. mkdir repro && cd repro && git init
+        2. npx --yes @blazity-atlas/core@latest init
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: doctor-output
+    attributes:
+      label: Doctor output
+      description: >-
+        Output of `npx --yes @blazity-atlas/core@latest doctor` (or `atlas doctor`)
+        run in the affected repo. Finding codes in brackets like [missing-config]
+        make triage fast — please include them.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Atlas version, OS, and Node version
+      description: "`atlas --version`, operating system, and `node --version`."
+      placeholder: "0.3.0, macOS 15, Node 22.11.0"
+    validations:
+      required: true
+  - type: input
+    id: workspace-root
+    attributes:
+      label: Workspace root (if not .ai)
+      description: Only needed if you use a custom workspace root.
+    validations:
+      required: false

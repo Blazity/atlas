@@ -17,7 +17,7 @@ export async function describeFinding(finding) {
   }
   // write
   const existed = await pathExists(action.absolutePath);
-  if (finding.code === "missing-managed-block") {
+  if (finding.code === "missing-managed-block" || finding.code === "stale-managed-block") {
     return { verb: existed ? "Updated" : "Created", target: `${action.relativePath} (managed block)` };
   }
   return { verb: existed ? "Updated" : "Created", target: action.relativePath };

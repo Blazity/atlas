@@ -70,6 +70,8 @@
 - [x] 36. FAQ: dirty worktree, existing AGENTS.md preserved, Windows status, custom root, phone-home, session-memory coexistence, monorepos.
 - [x] 37. Built-with-Atlas compressed to a table linking each repo's committed workspace.
 
+> Post-review adjustments (2026-07-03): the pasted-output block is replaced by a demo recording (placeholder committed, recording to follow); an emoji feature list opens the README; the comparison table (31) and FAQ (36) were removed as too raw — conflict answers live in the CLI's own messages; Built-with-Atlas (37) lists the projects without workspace links, phrased as Blazity projects on the standard, with a company footer added.
+
 ### Dogfooding
 
 - [x] 38. Run a real `atlas-review` Gate on this change set and commit the verdict artifact to the results path — the results directory must not be empty in the flagship repo.

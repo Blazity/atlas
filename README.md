@@ -27,56 +27,22 @@ Every coding agent forgets your repo between sessions, and every tool wants its 
 
 Atlas (by [Blazity](https://blazity.com)) gives the repository one place for all of it: a plain-files workspace that Claude Code, Codex, Cursor, and anything that reads [AGENTS.md](https://agents.md) share — committed to git, reviewable in PRs, and checked for drift by a deterministic CLI.
 
+- ⚡ **One command** — `npx @blazity-atlas/core init` scaffolds AGENTS.md, CLAUDE.md, and a complete `.ai/` workspace
+- 🤝 **Every agent, one context** — Claude Code, Cursor, Codex, Copilot, and Gemini CLI share the same repo-owned files
+- 🧠 **Memory that compounds** — vocabulary, decisions, plans, lessons, and review verdicts accumulate as plain committed files
+- 🩺 **Machine-checked** — `atlas doctor` verifies the structure in CI with frozen exit codes; `--fix` repairs drift deterministically
+- 📦 **Builds on what you have** — config-driven path aliases adopt your existing docs folders instead of replacing them
+- 🔒 **Nothing leaves your repo** — no telemetry, no network calls, one dependency, plain files only
+
 ## Quickstart
 
 ```bash
 npx --yes @blazity-atlas/core@latest init
 ```
 
-Real output, unedited:
+<!-- TODO(maintainer): embed demo recording here — assets/atlas-demo.gif (init → handoff prompt → doctor) -->
 
-```text
-Atlas init
-
-Created  .ai/config.json
-Created  .ai/memory/
-Created  .ai/plans/
-Created  .ai/research/
-Created  .ai/decisions/
-Created  .ai/decisions/adrs/
-Created  .ai/results/
-Created  .ai/skills/
-Created  .ai/LANGUAGE.md
-Created  .ai/memory/README.md
-Created  .ai/plans/.gitkeep
-Created  .ai/research/.gitkeep
-Created  .ai/results/.gitkeep
-Created  .ai/decisions/adrs/.gitkeep
-Created  .ai/skills/atlas-setup/SKILL.md
-Created  .ai/skills/atlas-setup/customization.md
-Created  .ai/skills/atlas-review/SKILL.md
-Created  AGENTS.md (managed block)
-Created  CLAUDE.md
-Linked   .claude/skills → ../.ai/skills
-Linked   .agents/skills → ../.ai/skills
-Linked   .cursor/skills → ../.ai/skills
-
-22 changes applied
-Template: standard
-Root: .ai
-
-Next step — paste this to your coding agent:
-
-  Read .ai/skills/atlas-setup/SKILL.md and follow it to finish the Atlas setup on
-  this repository: inspect the repo, confirm or refine the template,
-  and fill AGENTS.md and the workspace memory files.
-
-Claude Code: run /atlas-setup (or /atlas:atlas-setup with the Atlas plugin)
-Repair drift later: atlas doctor --fix
-Commit the scaffold when ready: git add .ai .claude .agents .cursor AGENTS.md CLAUDE.md
-```
-
-The CLI writes the deterministic structure; the printed prompt hands the rest to your own coding agent, which inspects the repository and fills the workspace with project-specific facts — vocabulary, memory, and a concise AGENTS.md.
+One run scaffolds the workspace — config, vocabulary, memory, artifact directories, two managed skills, the AGENTS.md and CLAUDE.md entrypoints, and the agent symlinks — then prints a ready-to-paste handoff prompt. Your own coding agent takes it from there: it inspects the repository and fills the workspace with project-specific facts.
 
 In a terminal, `init` runs interactively: it asks where the workspace should live (default `.ai`), previews every file before writing, and can launch a detected agent CLI (`claude`, `codex`, `cursor-agent`) with the handoff prompt.
 
@@ -147,20 +113,6 @@ Claude Code users can also install through the marketplace:
 /atlas:atlas-setup
 ```
 
-## Why not just …?
-
-| | Hand-written AGENTS.md | Spec Kit | Session-memory plugins | Atlas |
-| --- | --- | --- | --- | --- |
-| Structured repo context shared by every agent | you maintain it | partial (per-feature specs) | no (per-user database) | ✔ |
-| Drift checked in CI with fixed exit codes | no | no | no | ✔ |
-| Adopts your existing docs folders | n/a | no | no | ✔ (`pathAliases`) |
-| Reviews that leave verdict files | no | no | no | ✔ |
-| Spec → plan → tasks workflow for a feature | no | ✔ | no | no |
-| Automatic session capture | no | no | ✔ | no |
-| Zero install | ✔ | no | no | no |
-
-Honest notes: **Spec Kit** (GitHub) structures one feature's journey from spec to tasks; Atlas structures the repository's permanent context and checks it in CI — they compose rather than compete. **Session-memory plugins** (claude-mem, Mem0 and friends) capture everything automatically into a local database; Atlas memory is the curated, depersonalized, PR-reviewable layer the whole team shares — you can run both. A plain hand-written `AGENTS.md` is a fine start; Atlas is for when you want the same context to serve every agent, survive tool churn, and stay machine-checked.
-
 ## Scope and non-goals
 
 Atlas Core ships two kinds of gates today:
@@ -174,37 +126,17 @@ It does **not** run your tests, evals, or policy checks (execution gates are whe
 
 The CLI runs locally, makes no network calls at runtime, sends no telemetry, and has exactly one dependency ([@clack/prompts](https://www.npmjs.com/package/@clack/prompts) for the interactive terminal UI). Everything it writes is a plain file in your repository. The scaffolded documentation rules also require durable artifacts to stay depersonalized — memory that is safe to commit and safe to publish.
 
-## FAQ
-
-**I already have an AGENTS.md / CLAUDE.md.** Kept. Atlas appends one fenced managed block to `AGENTS.md` and only ever repairs that block. An existing `CLAUDE.md` that doesn't import `AGENTS.md` is reported for you to resolve, never overwritten.
-
-**`init` refused: "dirty git worktree".** Deliberate: a tool writing 22 files into your repo should only run on a state you can diff and revert. Commit or stash, or pass `--force`.
-
-**`.claude/skills` already exists in my repo.** Doctor reports it as a manual conflict with the fix: move your skills into `.ai/skills/` (they stay discoverable through the symlink), then `atlas doctor --fix`.
-
-**Monorepo?** Run `init` at the repository root — running it in a package directory refuses unless you pass `--here` for a deliberate nested workspace.
-
-**Custom workspace root?** `init` asks (or `--root docs/ai`); a one-line `.atlas` pointer file at the repo root makes it discoverable. The default `.ai` needs no pointer.
-
-**Windows?** Untested — the agent-surface symlinks likely require Developer Mode or elevation. Use macOS or Linux for now.
-
-**Does it phone home?** No. See [Privacy](#privacy).
-
-**Global install collides with another `atlas` binary?** MongoDB Atlas CLI and Ariga's atlas also ship an `atlas` bin. Use `npx`, or the `blazity-atlas` bin alias.
-
 ## Requirements
 
-Node.js ≥ 20 and a git repository. macOS and Linux supported; Windows untested (see FAQ).
+Node.js ≥ 20 and a git repository. macOS and Linux supported; Windows untested.
 
 ## Built with Atlas
 
-Projects developed on the Atlas standard — each links to its committed, inspectable workspace:
+Developed on the Atlas standard by Blazity:
 
-| Project | What it is | Workspace |
-| --- | --- | --- |
-| [Atlas Eve Starter](https://github.com/Blazity/atlas-eve-starter) | Starter monorepo for production-style agents | [`.ai/`](https://github.com/Blazity/atlas-eve-starter/tree/main/.ai) |
-| [Next.js Migration Plugin](https://github.com/Blazity/nextjs-migration-plugin) | Website → Next.js migrations with build gates and visual verification | [`.ai/`](https://github.com/Blazity/nextjs-migration-plugin/tree/main/.ai) |
-| [AI Workflow](https://github.com/Blazity/ai-workflow) | Issue → plan → implementation → reviewed PR agent workflows | — |
+- [Atlas Eve Starter](https://github.com/Blazity/atlas-eve-starter) — starter monorepo for production-style agents
+- [Next.js Migration Plugin](https://github.com/Blazity/nextjs-migration-plugin) — website → Next.js migrations with build gates and visual verification
+- [AI Workflow](https://github.com/Blazity/ai-workflow) — issue → plan → implementation → reviewed PR agent workflows
 
 ## Contributing
 
@@ -212,4 +144,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports with `atlas doctor` output a
 
 ## License
 
-[MIT](LICENSE) © [Blazity](https://blazity.com) — Atlas is the standard Blazity uses to build and review its own AI tooling; [blazity.com/atlas](https://blazity.com/atlas) covers the broader standard.
+[MIT](LICENSE) © [Blazity](https://blazity.com)
+
+---
+
+<p align="center">
+  <a href="https://blazity.com"><img src="https://github.com/Blazity.png" width="72" alt="Blazity"></a>
+</p>
+<p align="center">
+  <sub>Atlas is built and maintained by <a href="https://blazity.com">Blazity</a> — the standard behind our own AI tooling. More at <a href="https://blazity.com/atlas">blazity.com/atlas</a>.</sub>
+</p>

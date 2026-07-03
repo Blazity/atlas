@@ -9,7 +9,7 @@ description: Use when a repository needs Atlas setup, repair/update, AGENTS.md r
 
 Use this skill for first setup and later refreshes. The published CLI owns deterministic structure; this skill owns semantic repository understanding.
 
-Humans and agents use the same deterministic entrypoint. Do not reimplement `init`, `doctor`, path repair, symlink repair, or managed file repair inside this skill. Call the CLI through `npx`.
+Humans and agents use the same deterministic entrypoint. Do not reimplement `init`, `doctor`, path repair, symlink repair, or managed file repair inside this skill. Call the CLI through `npx`, preferring a locally installed `@blazity-atlas/core` (`npx --no-install @blazity-atlas/core …`) and falling back to the published package only when none is installed. Every `npx --yes @blazity-atlas/core@latest …` command in this skill is the fallback spelling of that rule, not an instruction to skip the local copy.
 
 Run the phases below in order.
 
@@ -29,7 +29,7 @@ Fall back to the published package only when that fails because the package is n
 npx --yes @blazity-atlas/core@latest doctor
 ```
 
-Use the same preference for every CLI command below. If a fix run rewrites files under the workspace skills directory (a newer published version landed), re-read this skill file before continuing.
+If a fix run rewrites files under the workspace skills directory (a newer published version landed), re-read this skill file before continuing.
 
 Then follow the CLI result:
 

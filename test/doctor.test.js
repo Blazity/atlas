@@ -550,9 +550,9 @@ test("doctor reports oversized AI context as advisory-only and --fix does not mu
     assert.match(report.stdout, /No issues found\./);
     assert.match(report.stdout, /^Advisory:$/m);
     assert.match(report.stdout, /\[context-size\] AI context size risk:/);
-    assert.match(report.stdout, /WARN AGENTS\.md \[########## {10}\]\s+52%/);
-    assert.match(report.stdout, /warn 8,000 chars \/ 200 lines, overflow 32,768 chars/);
-    assert.match(report.stdout, /Basis: Codex reads project docs up to a 32 KiB byte cap by default/);
+    assert.match(report.stdout, /WARN {5}AGENTS\.md +\[##### {5}\]\s+52%/);
+    assert.match(report.stdout, /files within budget/);
+    assert.doesNotMatch(report.stdout, /warn 8,000|overflow 32,768|Basis:/);
     assert.match(report.stdout, /Agent handoff: atlas doctor --handoff context-size/);
     assert.equal(fix.exitCode, 0);
     assert.equal(afterDoctor, beforeDoctor);
@@ -706,7 +706,7 @@ test("doctor --json carries context-size details for agent consumption", async (
     assert.equal(report.exitCode, 0);
     assert(contextSize);
     assert(Array.isArray(contextSize.details));
-    assert(contextSize.details.some((line) => /WARN AGENTS\.md/.test(line)));
+    assert(contextSize.details.some((line) => /WARN\s+AGENTS\.md/.test(line)));
     assert(payload.findings.filter((finding) => finding.code !== "context-size").every((finding) => !("details" in finding)));
   });
 });

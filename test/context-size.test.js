@@ -39,7 +39,7 @@ test("analyzeContextSizes classifies AI context files by heuristic thresholds", 
     assert.equal(byPath.get("AGENTS.md").threshold, 8000);
     assert.equal(byPath.get("AGENTS.md").overBy, 8001);
     assert.equal(byPath.get("AGENTS.md").usagePercent, 49);
-    assert.equal(byPath.get("AGENTS.md").usageBar, "[##########          ]  49%");
+    assert.equal(byPath.get("AGENTS.md").usageBar, "[#####     ]  49%");
     assert.equal(byPath.get(".ai/LANGUAGE.md").status, "warn");
     assert.equal(byPath.get(".ai/LANGUAGE.md").threshold, 12000);
     assert.equal(byPath.get(".ai/LANGUAGE.md").overBy, 1);
@@ -49,7 +49,7 @@ test("analyzeContextSizes classifies AI context files by heuristic thresholds", 
   });
 });
 
-test("context-size details show ASCII usage bars and source-informed threshold notes", async () => {
+test("context-size details render aligned usage bars for at-risk files only", async () => {
   await withTempWorkspace(async (directory) => {
     const config = createDefaultConfig();
     await mkdir(path.join(directory, ".ai/memory"), { recursive: true });
@@ -59,9 +59,11 @@ test("context-size details show ASCII usage bars and source-informed threshold n
 
     const lines = contextSizeDetailLines(await analyzeContextSizes(directory, config));
 
-    assert(lines.some((line) => /^WARN AGENTS\.md \[########## {10}\]  49% - /.test(line)));
-    assert(lines.some((line) => /warn 8,000 chars \/ 200 lines, overflow 32,768 chars/.test(line)));
-    assert(lines.includes("Basis: Codex reads project docs up to a 32 KiB byte cap by default, and Claude Code auto memory loads at most the first 200 lines or 25KB of its memory file at startup; sizes here are character counts, slightly below byte counts for non-ASCII text."));
+    assert(lines.some((line) => /^WARN {5}AGENTS\.md {11}\[##### {5}\]  49% {2}16,001 chars, 1 line$/.test(line)));
+    assert(lines.some((line) => /^OK {7}prompt-loaded total \[### {7}\]  25%/.test(line)));
+    assert(lines.includes("2 files within budget"));
+    assert(lines.includes("Agent handoff: atlas doctor --handoff context-size"));
+    assert(!lines.some((line) => /warn 8,000|overflow 32,768|Basis:/.test(line)));
   });
 });
 
@@ -185,7 +187,7 @@ test("line-count guidance warns memory files that stay under the character budge
 
     assert.equal(lessons.status, "warn");
     assert.equal(lessons.lineOverBy, 1);
-    assert(contextSizeDetailLines(report).some((line) => /over line guidance by 1 line\b/.test(line)));
+    assert(contextSizeDetailLines(report).some((line) => /^WARN {5}\.ai\/memory\/lessons\.md/.test(line)));
   });
 });
 

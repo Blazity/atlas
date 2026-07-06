@@ -14,7 +14,7 @@ export const contextSizeThresholds = {
   promptLoadedAggregate: { warn: 32768, overflow: 64000 }
 };
 
-const usageBarWidth = 20;
+const usageBarWidth = 10;
 const thresholdBasis = "Basis: Codex reads project docs up to a 32 KiB byte cap by default, and Claude Code auto memory loads at most the first 200 lines or 25KB of its memory file at startup; sizes here are character counts, slightly below byte counts for non-ASCII text.";
 
 export async function analyzeContextSizes(repoRoot, config, options = {}) {
@@ -52,7 +52,7 @@ export async function analyzeContextSizes(repoRoot, config, options = {}) {
   const promptLoadedEntries = entries.filter((entry) => entry.promptLoaded);
   const aggregate = classifySize({
     relativePath: "prompt-loaded context",
-    label: "AGGREGATE prompt-loaded context",
+    label: "prompt-loaded total",
     category: "aggregate",
     thresholdKey: "promptLoadedAggregate",
     promptLoaded: false,
@@ -91,11 +91,13 @@ export function contextSizeFinding(report) {
 }
 
 export function contextSizeDetailLines(report) {
-  const lines = report.entries.map(formatEntryLine);
-  lines.push(formatEntryLine(report.aggregate));
-  lines.push("Remediation: keep root instructions to commands, invariants, and safety rules; move durable detail into configured memory or decisions.");
-  lines.push(thresholdBasis);
-  lines.push("Thresholds are Atlas heuristics that combine documented agent caps with conservative adherence guidance.");
+  const displayed = [...report.riskEntries, report.aggregate];
+  const lines = formatEntryTable(displayed);
+  const okCount = report.entries.length - report.riskEntries.length;
+  if (okCount > 0) {
+    lines.push(`${pluralize(okCount, "file", "files")} within budget`);
+  }
+  lines.push("Remediation: keep root instructions lean; move durable detail into configured memory or decisions.");
   lines.push("Agent handoff: atlas doctor --handoff context-size");
   return lines;
 }
@@ -103,9 +105,9 @@ export function contextSizeDetailLines(report) {
 export function buildContextSizeHandoffPrompt(report) {
   const riskyEntries = report.entries.filter((entry) => entry.status !== "ok");
   const entries = riskyEntries.length > 0 ? riskyEntries : report.entries;
-  const reportLines = [...entries, report.aggregate]
-    .filter((entry) => entry.status !== "ok" || entry.category === "aggregate")
-    .map((entry) => `- ${formatEntryLine(entry)}`);
+  const displayed = [...entries, report.aggregate]
+    .filter((entry) => entry.status !== "ok" || entry.category === "aggregate");
+  const reportLines = formatEntryTable(displayed).map((line) => `- ${line}`);
 
   return [
     "Atlas context-size cleanup handoff",
@@ -267,14 +269,16 @@ function classifySize(entry) {
   };
 }
 
-function formatEntryLine(entry) {
-  const status = entry.status.toUpperCase();
-  return [
-    `${status} ${entry.label ?? entry.relativePath} ${entry.usageBar} - ${formatCharacterSummary(entry)}, ${formatLineSummary(entry.lineCount)}`,
-    `warn ${formatThreshold(entry.warn, entry.warnLines)}`,
-    `overflow ${formatNumber(entry.overflow)} chars`,
-    ...formatOverage(entry)
-  ].join(", ");
+// One aligned row per entry; padding is computed across the displayed set so
+// every bar starts in the same column regardless of file-name length.
+function formatEntryTable(entries) {
+  const nameWidth = Math.max(...entries.map((entry) => entryName(entry).length));
+  return entries.map((entry) =>
+    `${entry.status.toUpperCase().padEnd(8)} ${entryName(entry).padEnd(nameWidth)} ${entry.usageBar}  ${formatNumber(entry.characterCount)} chars, ${formatLineSummary(entry.lineCount)}`);
+}
+
+function entryName(entry) {
+  return entry.label ?? entry.relativePath;
 }
 
 function formatCharacterSummary(entry) {
@@ -283,25 +287,6 @@ function formatCharacterSummary(entry) {
 
 function formatLineSummary(lineCount) {
   return `${formatNumber(lineCount)} ${lineCount === 1 ? "line" : "lines"}`;
-}
-
-function formatThreshold(chars, lines) {
-  const parts = [`${formatNumber(chars)} chars`];
-  if (lines) {
-    parts.push(`${formatNumber(lines)} lines`);
-  }
-  return parts.join(" / ");
-}
-
-function formatOverage(entry) {
-  const overage = [];
-  if (entry.overBy > 0) {
-    overage.push(`over ${entry.status === "overflow" ? "overflow" : "warn"} by ${formatNumber(entry.overBy)} chars`);
-  }
-  if (entry.lineOverBy > 0) {
-    overage.push(`over line guidance by ${pluralize(entry.lineOverBy, "line", "lines")}`);
-  }
-  return overage;
 }
 
 function formatUsageBar(characterCount, overflow) {

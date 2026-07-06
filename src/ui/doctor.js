@@ -51,7 +51,7 @@ function colorizeContextSizeBar(line, theme) {
     OVERFLOW: theme.orange
   }[status];
 
-  return line.replace(/\[[# ]{20}\]\s+\d+%/u, (match) => paint(match));
+  return line.replace(/\[[# ]{10}\]\s+\d+%/u, (match) => paint(match));
 }
 
 export async function offerContextSizeHandoff(prompt, { io = {} } = {}) {

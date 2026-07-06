@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Context-size advisories in `doctor`: AI-facing files (`AGENTS.md`,
+  `CLAUDE.md`, vocabulary, memory, decisions, managed skills) are measured
+  against heuristic character budgets with usage bars, approximate token
+  counts, and remediation hints. Advisory-only — exit codes are unchanged
+  and `--fix` never mutates semantic content.
+- `atlas doctor --handoff context-size` prints a safe agent prompt for
+  context cleanup (exit 0 whenever the prompt or no-op notice prints);
+  interactive `doctor` runs offer to print it or launch a detected agent.
+- `atlas-compact`, the third managed skill: turns the context-size report
+  into a propose-then-apply cleanup loop with a before/after `doctor` run.
+- `doctor --json` includes per-finding `details` lines when present.
 - `atlas --version` / `-v`; help output now documents every flag and the
   frozen exit-code contract.
 - `atlas doctor --json` emits findings as structured data for CI and scripting.

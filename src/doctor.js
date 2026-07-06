@@ -10,10 +10,12 @@ import {
   resolveArtifactPath,
   validateConfig
 } from "./config.js";
+import { analyzeContextSizes, contextSizeFinding } from "./context-size.js";
 import { applyManagedBlock, inspectManagedBlock } from "./managed-blocks.js";
 import { fileExists, readTextIfExists, repoPath } from "./repo.js";
 import {
   agentManagedBlock,
+  defaultCompactSkillMd,
   defaultCustomizationMd,
   defaultClaudeMd,
   defaultConfigJson,
@@ -111,6 +113,7 @@ export async function collectDoctorFindings(repoRoot, options = {}) {
   await addPlaceholderFindings(repoRoot, config, findings);
   await addAliasFindings(repoRoot, config, findings);
   await addSemanticHealthFindings(repoRoot, config, findings);
+  await addContextSizeFindings(repoRoot, config, findings, options.diagnostics);
 
   return findings;
 }
@@ -296,6 +299,14 @@ async function addMaintenanceSkillFindings(repoRoot, config, findings) {
     staleCode: "stale-review-skill",
     description: "review skill"
   });
+  await addManagedSkillFileFinding(repoRoot, config, findings, {
+    skillName: "atlas-compact",
+    fileName: "SKILL.md",
+    content: defaultCompactSkillMd(),
+    missingCode: "missing-compact-skill",
+    staleCode: "stale-compact-skill",
+    description: "compact skill"
+  });
 }
 
 async function addManagedSkillFileFinding(repoRoot, config, findings, options) {
@@ -401,7 +412,7 @@ async function addSkillLinkFindings(repoRoot, config, findings) {
       const skillsRelativePath = resolveArtifactPath(config, "skills");
       findings.push(manualFinding(
         "skill-link-collision",
-        `${relativePath} exists but is not a symlink — move its contents into ${skillsRelativePath}/ (they stay discoverable through the symlink), then run atlas doctor --fix`
+        `${relativePath} exists but is not a symlink — move its contents into ${skillsRelativePath}/, delete the emptied ${relativePath} (its contents stay discoverable through the symlink), then run atlas doctor --fix`
       ));
       continue;
     }
@@ -486,6 +497,18 @@ async function addSemanticHealthFindings(repoRoot, config, findings) {
     if (entries.length === 1 && entries[0] === "README.md") {
       findings.push(advisoryFinding("empty-memory", `${memoryPath} contains only README.md — no memory captured yet`));
     }
+  }
+}
+
+async function addContextSizeFindings(repoRoot, config, findings, diagnostics) {
+  const report = await analyzeContextSizes(repoRoot, config);
+  if (diagnostics) {
+    diagnostics.contextSizeReport = report;
+  }
+
+  const finding = contextSizeFinding(report);
+  if (finding) {
+    findings.push(finding);
   }
 }
 

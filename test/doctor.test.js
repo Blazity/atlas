@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 import { runCli } from "../src/cli.js";
 import { createDefaultConfig } from "../src/config.js";
 import { applyFixes, collectDoctorFindings } from "../src/doctor.js";
+import { managedSkillFiles } from "../src/templates.js";
 import { commitAll, createGitRepo } from "./helpers/git.js";
 
 const execFileAsync = promisify(execFile);
@@ -529,6 +530,212 @@ test("doctor reports placeholder vocabulary and empty memory as advisories until
     assert.doesNotMatch(after.stdout, /unresolved-placeholder/);
     assert.doesNotMatch(after.stdout, /empty-language/);
     assert.doesNotMatch(after.stdout, /empty-memory/);
+  });
+});
+
+test("doctor reports oversized AI context as advisory-only and --fix does not mutate it", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+    const agentsPath = path.join(directory, "AGENTS.md");
+    const agents = await readFile(agentsPath, "utf8");
+    await writeFile(agentsPath, `${agents}\n${"a".repeat(16000)}\n`);
+    const beforeDoctor = await readFile(agentsPath, "utf8");
+
+    const report = await runCli(["doctor"], { cwd: directory });
+    const afterDoctor = await readFile(agentsPath, "utf8");
+    const fix = await runCli(["doctor", "--fix"], { cwd: directory });
+    const afterFix = await readFile(agentsPath, "utf8");
+
+    assert.equal(report.exitCode, 0);
+    assert.match(report.stdout, /No issues found\./);
+    assert.match(report.stdout, /^Advisory:$/m);
+    assert.match(report.stdout, /\[context-size\] AI context size risk:/);
+    assert.match(report.stdout, /WARN {5}AGENTS\.md +\[##### {5}\]\s+52%/);
+    assert.match(report.stdout, /files within budget/);
+    assert.doesNotMatch(report.stdout, /warn 8,000|overflow 32,768|Basis:/);
+    assert.match(report.stdout, /Agent handoff: atlas doctor --handoff context-size/);
+    assert.equal(fix.exitCode, 0);
+    assert.equal(afterDoctor, beforeDoctor);
+    assert.equal(afterFix, beforeDoctor);
+  });
+});
+
+test("collectDoctorFindings exposes context-size diagnostics for CLI handoff reuse", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+    const agentsPath = path.join(directory, "AGENTS.md");
+    const agents = await readFile(agentsPath, "utf8");
+    await writeFile(agentsPath, `${agents}\n${"a".repeat(16000)}\n`);
+    const diagnostics = {};
+
+    const findings = await collectDoctorFindings(directory, { diagnostics });
+
+    assert(findings.some((finding) => finding.code === "context-size"));
+    assert.equal(diagnostics.contextSizeReport.hasRisk, true);
+    assert(diagnostics.contextSizeReport.entries.some((entry) => entry.relativePath === "AGENTS.md"));
+  });
+});
+
+test("doctor leaves clean AI context without a context-size advisory", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+
+    const report = await runCli(["doctor"], { cwd: directory });
+
+    assert.equal(report.exitCode, 0);
+    assert.doesNotMatch(report.stdout, /\[context-size\]/);
+  });
+});
+
+test("doctor --handoff context-size prints a safe prompt without mutating files", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+    const agentsPath = path.join(directory, "AGENTS.md");
+    const agents = await readFile(agentsPath, "utf8");
+    await writeFile(agentsPath, `${agents}\n${"a".repeat(16000)}\n`);
+    const before = await readFile(agentsPath, "utf8");
+
+    const handoff = await runCli(["doctor", "--handoff", "context-size"], { cwd: directory });
+    const after = await readFile(agentsPath, "utf8");
+
+    assert.equal(handoff.exitCode, 0);
+    assert.match(handoff.stdout, /^Atlas doctor handoff$/m);
+    assert.match(handoff.stdout, /Do not rewrite files silently/);
+    assert.match(handoff.stdout, /AGENTS\.md/);
+    assert.equal(after, before);
+  });
+});
+
+test("doctor --handoff points agents at the atlas-compact skill", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+    const agentsPath = path.join(directory, "AGENTS.md");
+    const agents = await readFile(agentsPath, "utf8");
+    await writeFile(agentsPath, `${agents}\n${"a".repeat(16000)}\n`);
+
+    const handoff = await runCli(["doctor", "--handoff", "context-size"], { cwd: directory });
+
+    assert.match(handoff.stdout, /If the atlas-compact skill is available \(\.ai\/skills\/atlas-compact\/SKILL\.md/);
+  });
+});
+
+test("doctor --handoff exits 0 with the prompt even when fixable drift exists elsewhere", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+    const agentsPath = path.join(directory, "AGENTS.md");
+    const agents = await readFile(agentsPath, "utf8");
+    await writeFile(agentsPath, `${agents}\n${"a".repeat(16000)}\n`);
+    await rm(path.join(directory, ".ai/skills/atlas-review/SKILL.md"));
+
+    const doctorRun = await runCli(["doctor"], { cwd: directory });
+    const handoff = await runCli(["doctor", "--handoff", "context-size"], { cwd: directory });
+
+    assert.equal(doctorRun.exitCode, 1);
+    assert.equal(handoff.exitCode, 0);
+    assert.match(handoff.stdout, /Do not rewrite files silently/);
+  });
+});
+
+test("doctor --handoff without a context-size advisory reports no-op and exits 0", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+
+    const handoff = await runCli(["doctor", "--handoff", "context-size"], { cwd: directory });
+
+    assert.equal(handoff.exitCode, 0);
+    assert.match(handoff.stdout, /No context-size advisory found\. No handoff needed\./);
+  });
+});
+
+test("doctor --handoff on an uninitialized repo points at init and exits 1", async () => {
+  await withTempRepo(async (directory) => {
+    await writeFile(path.join(directory, "AGENTS.md"), "a".repeat(40000));
+
+    const handoff = await runCli(["doctor", "--handoff", "context-size"], { cwd: directory });
+
+    assert.equal(handoff.exitCode, 1);
+    assert.match(handoff.stdout, /Atlas is not set up in this repository\./);
+    assert.doesNotMatch(handoff.stdout, /config\.json/);
+  });
+});
+
+test("doctor --handoff refuses when doctor finds manual conflicts", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+    await rm(path.join(directory, ".claude/skills"), { recursive: true });
+    await mkdir(path.join(directory, ".claude/skills"), { recursive: true });
+    await writeFile(path.join(directory, ".claude/skills/README.md"), "not a symlink\n");
+
+    const doctorRun = await runCli(["doctor"], { cwd: directory });
+    const handoff = await runCli(["doctor", "--handoff", "context-size"], { cwd: directory });
+
+    assert.equal(doctorRun.exitCode, 2);
+    assert.equal(handoff.exitCode, 2);
+    assert.match(handoff.stderr, /Cannot hand off: doctor found manual conflicts\. Run atlas doctor first\./);
+  });
+});
+
+test("doctor rejects --handoff combined with --fix, --json, or an unknown topic", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+
+    const withFix = await runCli(["doctor", "--handoff", "context-size", "--fix"], { cwd: directory });
+    const withJson = await runCli(["doctor", "--handoff", "context-size", "--json"], { cwd: directory });
+    const badTopic = await runCli(["doctor", "--handoff", "memory"], { cwd: directory });
+
+    assert.equal(withFix.exitCode, 2);
+    assert.match(withFix.stderr, /Cannot combine --handoff with --fix/);
+    assert.equal(withJson.exitCode, 2);
+    assert.match(withJson.stderr, /Cannot combine --handoff with --json/);
+    assert.equal(badTopic.exitCode, 2);
+    assert.match(badTopic.stderr, /Unsupported handoff topic: use --handoff context-size/);
+  });
+});
+
+test("doctor --json carries context-size details for agent consumption", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+    const agentsPath = path.join(directory, "AGENTS.md");
+    const agents = await readFile(agentsPath, "utf8");
+    await writeFile(agentsPath, `${agents}\n${"a".repeat(16000)}\n`);
+
+    const report = await runCli(["doctor", "--json"], { cwd: directory });
+    const payload = JSON.parse(report.stdout);
+    const contextSize = payload.findings.find((finding) => finding.code === "context-size");
+
+    assert.equal(report.exitCode, 0);
+    assert(contextSize);
+    assert(Array.isArray(contextSize.details));
+    assert(contextSize.details.some((line) => /WARN\s+AGENTS\.md/.test(line)));
+    assert(payload.findings.filter((finding) => finding.code !== "context-size").every((finding) => !("details" in finding)));
+  });
+});
+
+test("init scaffolds every file in the managed-skill manifest", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+
+    for (const [skillName, fileName] of managedSkillFiles) {
+      const skillPath = path.join(directory, ".ai/skills", skillName, fileName);
+      await stat(skillPath);
+    }
+  });
+});
+
+test("doctor --fix restores the managed compact skill", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+    await writeFile(path.join(directory, ".ai/skills/atlas-compact/SKILL.md"), "local edit\n");
+
+    const before = await runCli(["doctor"], { cwd: directory });
+    const fix = await runCli(["doctor", "--fix", "--force"], { cwd: directory });
+    const skill = await readFile(path.join(directory, ".ai/skills/atlas-compact/SKILL.md"), "utf8");
+
+    assert.equal(before.exitCode, 1);
+    assert.match(before.stdout, /\[stale-compact-skill\] \.ai\/skills\/atlas-compact\/SKILL\.md/);
+    assert.equal(fix.exitCode, 0);
+    assert.match(skill, /name: atlas-compact/);
+    assert.doesNotMatch(skill, /local edit/);
   });
 });
 

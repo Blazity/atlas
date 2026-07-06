@@ -146,6 +146,7 @@ test("skill-link collisions carry a remediation hint", async () => {
     assert.equal(result.exitCode, 2);
     assert.match(result.stdout, /\[skill-link-collision\]/);
     assert.match(result.stdout, /move .*\.ai\/skills/);
+    assert.match(result.stdout, /delete the emptied \.claude\/skills/);
     assert.match(result.stdout, /doctor --fix/);
   });
 });

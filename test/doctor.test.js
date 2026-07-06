@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 
 import { runCli } from "../src/cli.js";
 import { createDefaultConfig } from "../src/config.js";
-import { applyFixes, collectDoctorFindings } from "../src/doctor.js";
+import { applyFixes, collectDoctorFindings, finalizeWorkspaceMetadata } from "../src/doctor.js";
 import { managedSkillFiles } from "../src/templates.js";
 import { commitAll, createGitRepo } from "./helpers/git.js";
 
@@ -110,17 +110,18 @@ test("init rejects unknown templates", async () => {
   });
 });
 
-test("doctor --fix restores the managed setup skill", async () => {
+// Local skill edits survive --fix and restore only via --reset-skills (ADR-0004).
+test("doctor --fix --reset-skills restores the managed setup skill", async () => {
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });
     await writeFile(path.join(directory, ".ai/skills/atlas-setup/SKILL.md"), "local edit\n");
 
     const before = await runCli(["doctor"], { cwd: directory });
-    const fix = await runCli(["doctor", "--fix", "--force"], { cwd: directory });
+    const fix = await runCli(["doctor", "--fix", "--force", "--reset-skills"], { cwd: directory });
     const skill = await readFile(path.join(directory, ".ai/skills/atlas-setup/SKILL.md"), "utf8");
 
-    assert.equal(before.exitCode, 1);
-    assert.match(before.stdout, /atlas-setup\/SKILL\.md/);
+    assert.equal(before.exitCode, 0);
+    assert.match(before.stdout, /\[customized-skill\] \.ai\/skills\/atlas-setup\/SKILL\.md/);
     assert.equal(fix.exitCode, 0);
     assert.match(fix.stdout, /^Applied fixes:$/m);
     assert.doesNotMatch(fix.stdout, /^Fixable:$/m);
@@ -129,17 +130,17 @@ test("doctor --fix restores the managed setup skill", async () => {
   });
 });
 
-test("doctor --fix restores the managed customization instructions", async () => {
+test("doctor --fix --reset-skills restores the managed customization instructions", async () => {
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });
     await writeFile(path.join(directory, ".ai/skills/atlas-setup/customization.md"), "local edit\n");
 
     const before = await runCli(["doctor"], { cwd: directory });
-    const fix = await runCli(["doctor", "--fix", "--force"], { cwd: directory });
+    const fix = await runCli(["doctor", "--fix", "--force", "--reset-skills"], { cwd: directory });
     const customization = await readFile(path.join(directory, ".ai/skills/atlas-setup/customization.md"), "utf8");
 
-    assert.equal(before.exitCode, 1);
-    assert.match(before.stdout, /atlas-setup\/customization\.md/);
+    assert.equal(before.exitCode, 0);
+    assert.match(before.stdout, /\[customized-skill\] \.ai\/skills\/atlas-setup\/customization\.md/);
     assert.equal(fix.exitCode, 0);
     assert.match(fix.stdout, /^Applied fixes:$/m);
     assert.match(customization, /Atlas Customization/);
@@ -722,17 +723,17 @@ test("init scaffolds every file in the managed-skill manifest", async () => {
   });
 });
 
-test("doctor --fix restores the managed compact skill", async () => {
+test("doctor --fix --reset-skills restores the managed compact skill", async () => {
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });
     await writeFile(path.join(directory, ".ai/skills/atlas-compact/SKILL.md"), "local edit\n");
 
     const before = await runCli(["doctor"], { cwd: directory });
-    const fix = await runCli(["doctor", "--fix", "--force"], { cwd: directory });
+    const fix = await runCli(["doctor", "--fix", "--force", "--reset-skills"], { cwd: directory });
     const skill = await readFile(path.join(directory, ".ai/skills/atlas-compact/SKILL.md"), "utf8");
 
-    assert.equal(before.exitCode, 1);
-    assert.match(before.stdout, /\[stale-compact-skill\] \.ai\/skills\/atlas-compact\/SKILL\.md/);
+    assert.equal(before.exitCode, 0);
+    assert.match(before.stdout, /\[customized-skill\] \.ai\/skills\/atlas-compact\/SKILL\.md/);
     assert.equal(fix.exitCode, 0);
     assert.match(skill, /name: atlas-compact/);
     assert.doesNotMatch(skill, /local edit/);
@@ -858,6 +859,7 @@ test("an explicit custom root scaffolds the workspace, writes the pointer, and d
   await withTempRepo(async (directory) => {
     const findings = await collectDoctorFindings(directory, { root: ".workspace" });
     await applyFixes(findings);
+    await finalizeWorkspaceMetadata(directory);
 
     assert.equal(await readFile(path.join(directory, ".atlas"), "utf8"), ".workspace\n");
     const config = JSON.parse(await readFile(path.join(directory, ".workspace/config.json"), "utf8"));
@@ -1026,17 +1028,17 @@ test("init installs the managed review skill", async () => {
   });
 });
 
-test("doctor --fix restores the managed review skill", async () => {
+test("doctor --fix --reset-skills restores the managed review skill", async () => {
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });
     await writeFile(path.join(directory, ".ai/skills/atlas-review/SKILL.md"), "local edit\n");
 
     const before = await runCli(["doctor"], { cwd: directory });
-    const fix = await runCli(["doctor", "--fix", "--force"], { cwd: directory });
+    const fix = await runCli(["doctor", "--fix", "--force", "--reset-skills"], { cwd: directory });
     const skill = await readFile(path.join(directory, ".ai/skills/atlas-review/SKILL.md"), "utf8");
 
-    assert.equal(before.exitCode, 1);
-    assert.match(before.stdout, /\[stale-review-skill\] \.ai\/skills\/atlas-review\/SKILL\.md/);
+    assert.equal(before.exitCode, 0);
+    assert.match(before.stdout, /\[customized-skill\] \.ai\/skills\/atlas-review\/SKILL\.md/);
     assert.equal(fix.exitCode, 0);
     assert.match(skill, /name: atlas-review/);
     assert.doesNotMatch(skill, /local edit/);

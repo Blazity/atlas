@@ -6,7 +6,7 @@ import test from "node:test";
 
 import { buildPlan } from "../src/plan.js";
 import { createConfigForTemplate } from "../src/config.js";
-import { applyFixes } from "../src/doctor.js";
+import { applyFixes, finalizeWorkspaceMetadata } from "../src/doctor.js";
 import { createGitRepo } from "./helpers/git.js";
 
 async function withTempRepo(fn) {
@@ -61,6 +61,7 @@ test("buildPlan reports advisories separately, never as conflicts or actions", a
   await withTempRepo(async (dir) => {
     const fresh = await buildPlan(dir, { templateName: "standard" });
     await applyFixes(fresh.fixable);
+    await finalizeWorkspaceMetadata(dir);
 
     const settled = await buildPlan(dir, { templateName: "standard" });
 

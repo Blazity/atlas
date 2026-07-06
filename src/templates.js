@@ -82,6 +82,10 @@ export function defaultCompactSkillMd() {
   return readPackagedSkillFile("atlas-compact/SKILL.md");
 }
 
+export function packagedSkillContent(skillName, fileName) {
+  return readPackagedSkillFile(`${skillName}/${fileName}`);
+}
+
 function readPackagedSkillFile(relativePath) {
   return readFileSync(new URL(`../skills/${relativePath}`, import.meta.url), "utf8").replace(/\n$/u, "");
 }

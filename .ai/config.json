@@ -1,5 +1,6 @@
 {
   "schemaVersion": 1,
+  "atlasVersion": "0.4.0",
   "template": "library",
   "setupState": "configured",
   "artifactRoot": ".ai",

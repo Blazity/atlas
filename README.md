@@ -76,7 +76,7 @@ If your repo already keeps docs in conventional places (`docs/adrs`, `docs/specs
 
 ```yaml
 - name: Atlas structural gate
-  run: npx --yes @blazity-atlas/core@0.3.0 doctor   # pin the version your workspace was scaffolded with
+  run: npx --yes @blazity-atlas/core@0.4.0 doctor   # pin the version your workspace was scaffolded with
 ```
 
 The exit codes are a frozen contract:

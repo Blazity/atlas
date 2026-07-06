@@ -412,7 +412,7 @@ async function addSkillLinkFindings(repoRoot, config, findings) {
       const skillsRelativePath = resolveArtifactPath(config, "skills");
       findings.push(manualFinding(
         "skill-link-collision",
-        `${relativePath} exists but is not a symlink — move its contents into ${skillsRelativePath}/ (they stay discoverable through the symlink), then run atlas doctor --fix`
+        `${relativePath} exists but is not a symlink — move its contents into ${skillsRelativePath}/, delete the emptied ${relativePath} (its contents stay discoverable through the symlink), then run atlas doctor --fix`
       ));
       continue;
     }

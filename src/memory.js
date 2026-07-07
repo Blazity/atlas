@@ -16,6 +16,7 @@ const staleAfterDays = 90;
 const nearDuplicateThreshold = 0.82;
 const sharedMemoryFileLimitBytes = 1024 * 1024;
 const sharedMemoryTreeLimitBytes = 10 * 1024 * 1024;
+const defaultGitTimeoutMs = 30_000;
 
 export async function parseMemoryEntries(repoRoot, config, options = {}) {
   const memoryRoot = resolveArtifactPath(config, "memory");
@@ -53,7 +54,14 @@ export async function pullSharedMemory(repoRoot, config, root, options = {}) {
     return { ok: false, error: "memory.shared is not configured in the Atlas config." };
   }
 
-  const execGit = async (args, execOptions) => (options.execFile ?? execFileAsync)("git", args, execOptions);
+  const gitTimeoutMs = options.gitTimeoutMs ?? defaultGitTimeoutMs;
+  const execGit = async (args, execOptions = {}) => {
+    try {
+      return await (options.execFile ?? execFileAsync)("git", args, { ...execOptions, timeout: gitTimeoutMs });
+    } catch (error) {
+      throw gitCommandError(error, sharedConfig.source, gitTimeoutMs);
+    }
+  };
   const tempRoot = await mkdtemp(path.join(tmpdir(), "atlas-memory-pull-"));
   const checkoutPath = path.join(tempRoot, "source");
   const sharedRelativePath = normalizePath(path.join(resolveArtifactPath(config, "memory"), "shared"));
@@ -248,6 +256,16 @@ async function memoryLifecycleFindings(repoRoot, entries, options = {}) {
       `memory entry ${entryLabel(entry)} has malformed Atlas metadata — close the comment or remove it`,
       [`${entry.relativePath}:${entry.metadataLine}`]
     ));
+  }
+
+  for (const entry of managedEntries) {
+    if (hasMalformedVerifiedDate(entry.verified)) {
+      findings.push(advisoryFinding(
+        "malformed-memory-metadata",
+        `memory entry ${entryLabel(entry)} has malformed verified date ${entry.verified} — use YYYY-MM-DD or remove the verified metadata`,
+        [entryLocation(entry)]
+      ));
+    }
   }
 
   for (const finding of duplicateIdFindings(managedEntries)) {
@@ -684,15 +702,66 @@ function normalizedSimilarity(left, right) {
 }
 
 function isStale(verified) {
-  if (!verified || !/^\d{4}-\d{2}-\d{2}$/u.test(verified)) {
-    return false;
-  }
-  const verifiedTime = Date.parse(`${verified}T00:00:00.000Z`);
-  if (Number.isNaN(verifiedTime)) {
+  const verifiedTime = parseVerifiedTime(verified);
+  if (verifiedTime === null) {
     return false;
   }
   const ageMs = Date.now() - verifiedTime;
   return ageMs > staleAfterDays * 24 * 60 * 60 * 1000;
+}
+
+function hasMalformedVerifiedDate(verified) {
+  return Boolean(verified) && parseVerifiedTime(verified) === null;
+}
+
+function parseVerifiedTime(verified) {
+  if (!verified) {
+    return null;
+  }
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(verified);
+  if (!match) {
+    return null;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const verifiedTime = Date.UTC(year, month - 1, day);
+  const date = new Date(verifiedTime);
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return verifiedTime;
+}
+
+function gitCommandError(error, sharedSource, timeoutMs) {
+  return new Error(gitCommandErrorMessage(error, sharedSource, timeoutMs));
+}
+
+function gitCommandErrorMessage(error, sharedSource, timeoutMs) {
+  if (isGitTimeoutError(error)) {
+    return `git command timed out after ${timeoutMs} ms`;
+  }
+
+  const stderr = typeof error?.stderr === "string" ? error.stderr.trim() : "";
+  if (stderr) {
+    return redactSharedSource(stderr, sharedSource);
+  }
+  return "git command failed";
+}
+
+function isGitTimeoutError(error) {
+  return Boolean(error?.killed && error?.signal === "SIGTERM");
+}
+
+function redactSharedSource(value, sharedSource) {
+  if (typeof sharedSource !== "string" || sharedSource === "") {
+    return value;
+  }
+  return value.split(sharedSource).join("[redacted source]");
 }
 
 async function citationMissing(repoRoot, cite) {

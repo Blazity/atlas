@@ -202,6 +202,30 @@ test("doctor reports malformed atlas metadata comments instead of ignoring them"
   });
 });
 
+test("doctor reports malformed verified dates as memory metadata advisories", async () => {
+  await withTempRepo(async (directory) => {
+    await initConfiguredWorkspace(directory);
+    await writeFile(path.join(directory, ".ai/memory/lessons.md"), [
+      "# Lessons",
+      "",
+      "## Broken verified date",
+      "<!-- atlas: id=broken-verified-date verified=notadate scope=repo -->",
+      "",
+      "Malformed verified dates should not silently bypass stale-memory checks.",
+      ""
+    ].join("\n"));
+
+    const result = await runCli(["doctor", "--json"], { cwd: directory });
+    const payload = JSON.parse(result.stdout);
+    const finding = payload.findings.find((candidate) => candidate.code === "malformed-memory-metadata");
+
+    assert.equal(result.exitCode, 0);
+    assert.equal(finding?.severity, "advisory");
+    assert.match(finding?.message ?? "", /verified date notadate/);
+    assert.deepEqual(finding?.details, [".ai/memory/lessons.md:3"]);
+  });
+});
+
 test("near-duplicate detection stays bounded for a few hundred memory entries", async () => {
   await withTempRepo(async (directory) => {
     const config = createDefaultConfig();
@@ -357,6 +381,91 @@ test("atlas memory pull passes hostile git values after option separators", asyn
     assertGitArgumentGuard(calls.find((call) => call.args[0] === "remote")?.args, config.memory.shared.source);
     assertGitArgumentGuard(calls.find((call) => call.args[0] === "fetch")?.args, config.memory.shared.ref);
     assertGitArgumentGuard(calls.find((call) => call.args[0] === "switch")?.args, config.memory.shared.pin);
+  });
+});
+
+test("atlas memory pull passes the default timeout to every git call", async () => {
+  await withTempRepo(async (directory) => {
+    const calls = [];
+    const config = createDefaultConfig();
+    config.memory = {
+      shared: {
+        source: "file:///tmp/atlas-memory",
+        ref: "main",
+        pin: "a".repeat(40)
+      }
+    };
+
+    const result = await pullSharedMemory(directory, config, ".ai", {
+      execFile: async (command, args, execOptions) => {
+        calls.push({ command, args: [...args], execOptions });
+        return { stdout: "", stderr: "" };
+      }
+    });
+
+    assert.equal(result.ok, false);
+    assert.deepEqual(
+      calls.map((call) => [call.args[0], call.execOptions.timeout]),
+      [
+        ["init", 30000],
+        ["remote", 30000],
+        ["fetch", 30000],
+        ["switch", 30000]
+      ]
+    );
+  });
+});
+
+test("atlas memory pull surfaces git timeouts clearly", async () => {
+  await withTempRepo(async (directory) => {
+    const config = createDefaultConfig();
+    config.memory = {
+      shared: {
+        source: "file:///tmp/atlas-memory",
+        ref: "main",
+        pin: "a".repeat(40)
+      }
+    };
+
+    const result = await pullSharedMemory(directory, config, ".ai", {
+      gitTimeoutMs: 7,
+      execFile: async () => {
+        const error = new Error("Command failed: git init --quiet");
+        error.killed = true;
+        error.signal = "SIGTERM";
+        throw error;
+      }
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(result.error, /timed out after 7 ms/);
+  });
+});
+
+test("atlas memory pull redacts credentialed source urls from git failures", async () => {
+  await withTempRepo(async (directory) => {
+    const config = createDefaultConfig();
+    const source = "https://user:secret-token@example.com/org/memory.git";
+    config.memory = {
+      shared: {
+        source,
+        ref: "main",
+        pin: "a".repeat(40)
+      }
+    };
+
+    const result = await pullSharedMemory(directory, config, ".ai", {
+      execFile: async () => {
+        const error = new Error(`Command failed: git remote add origin -- ${source}`);
+        error.stderr = `fatal: could not read from ${source}`;
+        throw error;
+      }
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(result.error, /fatal: could not read from \[redacted source\]/);
+    assert.doesNotMatch(result.error, /secret-token/);
+    assert.doesNotMatch(result.error, new RegExp(escapeRegExp(source)));
   });
 });
 
@@ -577,4 +686,8 @@ function assertGitArgumentGuard(args, value) {
   const index = args.indexOf(value);
   assert.notEqual(index, -1, `missing git argument ${value}`);
   assert.equal(args[index - 1], "--", `${value} is not guarded by -- in: ${args.join(" ")}`);
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }

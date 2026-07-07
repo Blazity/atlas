@@ -89,7 +89,7 @@ Memory stays in readable markdown files. Entries can opt into lifecycle checks b
 
 All metadata keys are optional: `id`, `verified`, `cites`, `scope`, `source`, and `superseded-by`. Plain markdown remains healthy; unmarked entries are not checked for age, citations, dedupe, or supersede links.
 
-`doctor` reports memory lifecycle findings as advisories only: `duplicate-memory-entry`, `stale-memory`, `broken-citation`, and `dangling-supersede`. The scratch tier lives in `.ai/memory/local/` and is gitignored. The `atlas-memory` managed skill handles session-end capture, depersonalization, ADD / UPDATE / DELETE / NOOP proposals, and promotion from scratch into committed memory.
+`doctor` reports memory findings as advisories only: `duplicate-memory-entry`, `duplicate-memory-id`, `stale-memory`, `broken-citation`, `dangling-supersede`, `malformed-memory-metadata`, `shared-memory-behind`, and `shared-memory-edited`. The scratch tier lives in `.ai/memory/local/` and is gitignored. The `atlas-memory` managed skill handles session-end capture, depersonalization, ADD / UPDATE / DELETE / NOOP proposals, and promotion from scratch into committed memory.
 
 For organization memory, configure:
 

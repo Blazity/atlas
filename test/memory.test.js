@@ -236,7 +236,7 @@ test("near-duplicate detection stays bounded for a few hundred memory entries", 
   });
 });
 
-test("init scaffolds the memory scratch tier, managed atlas-memory skill, and session protocol", async () => {
+test("init scaffolds the memory gitignore, managed atlas-memory skill, and session protocol", async () => {
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });
 
@@ -246,8 +246,9 @@ test("init scaffolds the memory scratch tier, managed atlas-memory skill, and se
     const lock = JSON.parse(await readFile(path.join(directory, ".ai/atlas.lock.json"), "utf8"));
 
     assert.match(gitignore, /^local\/$/m);
-    await stat(path.join(directory, ".ai/memory/local"));
+    await assert.rejects(stat(path.join(directory, ".ai/memory/local")), /ENOENT/);
     assert.match(skill, /name: atlas-memory/);
+    assert.match(skill, /mkdir -p/);
     assert.match(skill, /ADD \/ UPDATE \/ DELETE \/ NOOP/);
     assert.match(skill, /Resolve every destination through/);
     assert.match(agents, /Session start: read the configured memory index/);
@@ -256,19 +257,30 @@ test("init scaffolds the memory scratch tier, managed atlas-memory skill, and se
   });
 });
 
-test("doctor heals a missing memory scratch directory after init", async () => {
+test("doctor heals a missing memory gitignore after init", async () => {
   await withTempRepo(async (directory) => {
     await initConfiguredWorkspace(directory);
-    await rm(path.join(directory, ".ai/memory/local"), { recursive: true, force: true });
+    await rm(path.join(directory, ".ai/memory/.gitignore"), { force: true });
 
     const before = await runCli(["doctor"], { cwd: directory });
     const fix = await runCli(["doctor", "--fix", "--force"], { cwd: directory });
 
     assert.equal(before.exitCode, 1);
-    assert.match(before.stdout, /\[missing-memory-local\] \.ai\/memory\/local is missing/);
+    assert.match(before.stdout, /\[missing-memory-gitignore\] \.ai\/memory\/\.gitignore is missing/);
     assert.equal(fix.exitCode, 0);
-    await stat(path.join(directory, ".ai/memory/local"));
     assert.match(await readFile(path.join(directory, ".ai/memory/.gitignore"), "utf8"), /^local\/$/m);
+  });
+});
+
+test("doctor treats an absent memory local directory as clean", async () => {
+  await withTempRepo(async (directory) => {
+    await initConfiguredWorkspace(directory);
+    await rm(path.join(directory, ".ai/memory/local"), { recursive: true, force: true });
+
+    const doctor = await runCli(["doctor"], { cwd: directory });
+
+    assert.equal(doctor.exitCode, 0);
+    assert.doesNotMatch(doctor.stdout, /missing-memory-local/);
   });
 });
 

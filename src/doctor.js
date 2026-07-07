@@ -328,13 +328,7 @@ async function addMemoryScratchFindings(repoRoot, config, findings) {
   const localAbsolutePath = repoPath(repoRoot, localPath);
   const localKind = await getPathKind(localAbsolutePath);
 
-  if (localKind === "missing") {
-    findings.push(fixableFinding("missing-memory-local", `${localPath} is missing`, {
-      type: "mkdir",
-      relativePath: localPath,
-      absolutePath: localAbsolutePath
-    }));
-  } else if (localKind !== "directory") {
+  if (localKind !== "missing" && localKind !== "directory") {
     findings.push(manualFinding("directory-collision", `${localPath} exists but is not a directory`));
   }
 

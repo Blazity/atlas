@@ -7,7 +7,7 @@ description: Use at session end to capture durable lessons, vocabulary, decision
 
 ## Overview
 
-Use this skill near the end of meaningful work, when a session produced durable context that should help future agents act better. The CLI owns deterministic checks: entry parsing, duplicate/stale/citation/supersede advisories, scratch-tier scaffolding, and shared-memory vendoring. This skill owns semantic judgment: what is worth remembering, how it should be depersonalized, and whether it is an ADD / UPDATE / DELETE / NOOP.
+Use this skill near the end of meaningful work, when a session produced durable context that should help future agents act better. The CLI owns deterministic checks: entry parsing, duplicate/stale/citation/supersede advisories, scratch-tier ignore rules, and shared-memory vendoring. This skill owns semantic judgment: what is worth remembering, how it should be depersonalized, and whether it is an ADD / UPDATE / DELETE / NOOP.
 
 Run the phases below in order.
 
@@ -67,7 +67,7 @@ Weak:
 
 ## Phase 5 — Scratch and Promotion
 
-Default uncertain captures to `<configured memory>/local/`. The scratch tier is personal and gitignored.
+Default uncertain captures to `<configured memory>/local/`. The scratch tier is personal and gitignored. Before writing a scratch entry, create the directory on demand with `mkdir -p <configured memory>/local`.
 
 Promote from scratch only after rewriting the entry into durable form:
 

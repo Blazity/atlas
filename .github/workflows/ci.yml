@@ -20,7 +20,10 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npm test
+      # Serial test files: parallel test-runner children intermittently corrupt
+      # the runner IPC stream on 4-core Linux runners (upstream Node issue,
+      # "Unable to deserialize cloned data"). The suite runs in seconds.
+      - run: npm test -- --test-concurrency=1
       # Dogfood the local CLI only. Never use npx / the published package here:
       # the published doctor --fix would overwrite unreleased managed skill edits.
       - run: node bin/atlas.js doctor

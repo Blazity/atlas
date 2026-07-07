@@ -133,19 +133,9 @@ export function validateConfig(config) {
     errors.push("paths must be an object");
   } else {
     for (const key of requiredPaths) {
-      if (typeof config.paths[key] !== "string" || config.paths[key].trim() === "") {
-        errors.push(`paths.${key} must be a non-empty string`);
-      } else if (!path.isAbsolute(config.paths[key]) && pathEscapesRoot(config.paths[key])) {
-        errors.push(`paths.${key} must not escape artifactRoot`);
-      }
+      addPathRuleErrors(config.paths, key, errors);
     }
-    if (config.paths.graph !== undefined) {
-      if (typeof config.paths.graph !== "string" || config.paths.graph.trim() === "") {
-        errors.push("paths.graph must be a non-empty string");
-      } else if (!path.isAbsolute(config.paths.graph) && pathEscapesRoot(config.paths.graph)) {
-        errors.push("paths.graph must not escape artifactRoot");
-      }
-    }
+    addPathRuleErrors(config.paths, "graph", errors, { optional: true });
   }
 
   if (!config.pathAliases || typeof config.pathAliases !== "object" || Array.isArray(config.pathAliases)) {
@@ -234,6 +224,18 @@ export function configPath(repoRoot, root = ".ai") {
 function pathEscapesRoot(value) {
   const normalized = path.posix.normalize(normalizePath(value));
   return normalized === ".." || normalized.startsWith("../");
+}
+
+function addPathRuleErrors(paths, key, errors, options = {}) {
+  const value = paths[key];
+  if (value === undefined && options.optional) {
+    return;
+  }
+  if (typeof value !== "string" || value.trim() === "") {
+    errors.push(`paths.${key} must be a non-empty string`);
+  } else if (!path.isAbsolute(value) && pathEscapesRoot(value)) {
+    errors.push(`paths.${key} must not escape artifactRoot`);
+  }
 }
 
 function addGraphFeatureErrors(graph, errors) {

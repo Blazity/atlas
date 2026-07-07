@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -151,6 +151,30 @@ test("doctor reports graph artifacts without a parseable sidecar as advisories",
     assert(missingPayload.findings.some((finding) => finding.code === "graph-meta-missing" && finding.severity === "advisory"));
     assert.equal(invalid.exitCode, 0);
     assert(invalidPayload.findings.some((finding) => finding.code === "graph-meta-invalid" && finding.severity === "advisory"));
+  });
+});
+
+test("doctor reports unreadable graph directories as advisories", async () => {
+  await withTempRepo(async (directory) => {
+    await writeConfig(directory, graphConfig());
+    await runCli(["doctor", "--fix", "--force"], { cwd: directory });
+    const graphDirectory = path.join(directory, ".ai/graph");
+    await mkdir(graphDirectory, { recursive: true });
+
+    await chmod(graphDirectory, 0o000);
+    try {
+      const result = await runCli(["doctor", "--json"], { cwd: directory });
+      const payload = JSON.parse(result.stdout);
+      const finding = payload.findings.find((candidate) => candidate.code === "graph-inspection-failed");
+
+      assert.equal(result.exitCode, 0);
+      assert.equal(payload.classification, "clean");
+      assert.equal(finding.severity, "advisory");
+      assert.match(finding.message, /\.ai\/graph could not be inspected/);
+      assert(finding.details.some((detail) => /EACCES|permission denied/u.test(detail)));
+    } finally {
+      await chmod(graphDirectory, 0o700);
+    }
   });
 });
 

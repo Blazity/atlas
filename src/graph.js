@@ -51,17 +51,39 @@ export async function collectGraphFindings(repoRoot, config) {
 
   const graphDirectory = repoPath(repoRoot, graph.path);
   const graphDirectoryKind = await getPathKind(graphDirectory);
-  if (graphDirectoryKind === "missing") {
+  if (graphDirectoryKind.error) {
+    return [graphInspectionFailedFinding(graph.path, graphDirectoryKind.error)];
+  }
+  if (graphDirectoryKind.kind === "missing") {
     return [];
   }
-  if (graphDirectoryKind !== "directory") {
+  if (graphDirectoryKind.kind !== "directory") {
     return [advisoryFinding("graph-meta-missing", `${graph.path} exists but is not a directory for graph artifacts`)];
   }
 
-  const entries = await readdir(graphDirectory, { withFileTypes: true });
+  const directoryEntries = await readGraphDirectory(graphDirectory);
+  if (directoryEntries.error) {
+    return [graphInspectionFailedFinding(graph.path, directoryEntries.error)];
+  }
+
+  const entries = directoryEntries.entries;
   const artifactEntries = entries.filter((entry) => entry.name !== graphMetaFileName);
   const metaPath = normalizePath(path.join(graph.path, graphMetaFileName));
-  const metaContent = await readTextIfExists(repoPath(repoRoot, metaPath));
+  const metaAbsolutePath = repoPath(repoRoot, metaPath);
+  const metaKind = await getPathKind(metaAbsolutePath);
+  if (metaKind.error) {
+    return [graphInspectionFailedFinding(metaPath, metaKind.error)];
+  }
+  if (metaKind.kind !== "missing" && metaKind.kind !== "file") {
+    return [graphInspectionFailedFinding(metaPath, new Error(`expected file, found ${metaKind.kind}`))];
+  }
+
+  const meta = await readGraphMeta(metaAbsolutePath);
+  if (meta.error) {
+    return [graphInspectionFailedFinding(metaPath, meta.error)];
+  }
+
+  const metaContent = meta.content;
   if (metaContent === null) {
     if (artifactEntries.length === 0) {
       return [];
@@ -164,13 +186,44 @@ async function getPathKind(absolutePath) {
   try {
     const stats = await stat(absolutePath);
     if (stats.isDirectory()) {
-      return "directory";
+      return { kind: "directory" };
     }
     if (stats.isFile()) {
-      return "file";
+      return { kind: "file" };
     }
-    return "other";
-  } catch {
-    return "missing";
+    return { kind: "other" };
+  } catch (error) {
+    if (error?.code === "ENOENT" || error?.code === "ENOTDIR") {
+      return { kind: "missing" };
+    }
+    return { kind: "unknown", error };
   }
+}
+
+async function readGraphDirectory(absolutePath) {
+  try {
+    return { entries: await readdir(absolutePath, { withFileTypes: true }) };
+  } catch (error) {
+    return { error };
+  }
+}
+
+async function readGraphMeta(absolutePath) {
+  try {
+    return { content: await readTextIfExists(absolutePath) };
+  } catch (error) {
+    return { error };
+  }
+}
+
+function graphInspectionFailedFinding(relativePath, error) {
+  return advisoryFinding("graph-inspection-failed", `${relativePath} could not be inspected`, [errorDetail(error)]);
+}
+
+function errorDetail(error) {
+  const message = error?.message ?? String(error);
+  if (error?.code && !message.includes(error.code)) {
+    return `${error.code}: ${message}`;
+  }
+  return message;
 }

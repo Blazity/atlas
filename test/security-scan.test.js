@@ -39,6 +39,21 @@ async function withTempRepo(fn) {
   });
 }
 
+function hasFinding(findings, wanted) {
+  return findings.some((finding) =>
+    finding.code === wanted.code
+    && finding.file === wanted.file
+    && finding.line === wanted.line
+    && finding.patternClass === wanted.patternClass);
+}
+
+function assertFinding(findings, wanted) {
+  assert.ok(
+    hasFinding(findings, wanted),
+    `missing ${wanted.code} ${wanted.file}:${wanted.line} ${wanted.patternClass}`
+  );
+}
+
 test("security scan flags every malicious fixture with file and line evidence", async () => {
   const findings = await scanFixture("malicious");
   const expected = [
@@ -46,6 +61,17 @@ test("security scan flags every malicious fixture with file and line evidence", 
     { code: "security-hidden-text", file: "AGENTS.md", line: 3, patternClass: "imperative-html-comment" },
     { code: "security-hidden-text", file: ".ai/memory/blob.md", line: 2, patternClass: "encoded-blob" },
     { code: "security-injection-phrase", file: ".ai/memory/operations.md", line: 2, patternClass: "silent-instruction" },
+    { code: "security-injection-phrase", file: ".ai/memory/operations.md", line: 3, patternClass: "external-path-directive" },
+    { code: "security-exfiltration-shape", file: ".ai/memory/operations.md", line: 4, patternClass: "sensitive-file-exfiltration" },
+    { code: "security-injection-phrase", file: ".ai/memory/operations.md", line: 5, patternClass: "instruction-override" },
+    { code: "security-injection-phrase", file: "AGENTS.md", line: 9, patternClass: "instruction-override" },
+    { code: "security-injection-phrase", file: "AGENTS.md", line: 9, patternClass: "user-concealment" },
+    { code: "security-injection-phrase", file: "AGENTS.md", line: 9, patternClass: "silent-instruction" },
+    { code: "security-write-surface", file: "AGENTS.md", line: 10, patternClass: "external-write-path" },
+    { code: "security-injection-phrase", file: "CLAUDE.md", line: 7, patternClass: "instruction-override" },
+    { code: "security-injection-phrase", file: "CLAUDE.md", line: 7, patternClass: "user-concealment" },
+    { code: "security-injection-phrase", file: "CLAUDE.md", line: 7, patternClass: "silent-instruction" },
+    { code: "security-injection-phrase", file: ".claude/rules/security.md", line: 3, patternClass: "instruction-override" },
     { code: "security-exfiltration-shape", file: ".ai/LANGUAGE.md", line: 9, patternClass: "credential-url" },
     { code: "security-exfiltration-shape", file: ".ai/LANGUAGE.md", line: 10, patternClass: "unusual-url-scheme" },
     { code: "security-exfiltration-shape", file: ".ai/LANGUAGE.md", line: 11, patternClass: "unusual-url-scheme" },
@@ -68,11 +94,45 @@ test("security scan flags every malicious fixture with file and line evidence", 
       && finding.file === wanted.file
       && finding.line === wanted.line
       && finding.patternClass === wanted.patternClass);
-    assert.ok(found, `missing ${wanted.code} ${wanted.file}:${wanted.line} ${wanted.patternClass}`);
+    assertFinding(findings, wanted);
     assert.equal(found.severity, "advisory");
     assert.equal(found.fixable, false);
     assert.match(found.remediation, /\S/);
   }
+});
+
+test("security scan keeps generic tool directives disabled in instruction files", async () => {
+  const findings = await scanFixture("malicious");
+  const instructionFindings = findings.filter((finding) =>
+    ["AGENTS.md", "CLAUDE.md", ".claude/rules/security.md"].includes(finding.file));
+
+  assert.equal(
+    instructionFindings.some((finding) => finding.patternClass === "tool-invocation-directive"),
+    false
+  );
+});
+
+test("security scan scopes negation to the current clause", async () => {
+  const findings = await scanFixture("malicious");
+
+  assertFinding(findings, {
+    code: "security-injection-phrase",
+    file: ".ai/memory/operations.md",
+    line: 3,
+    patternClass: "external-path-directive"
+  });
+  assertFinding(findings, {
+    code: "security-exfiltration-shape",
+    file: ".ai/memory/operations.md",
+    line: 4,
+    patternClass: "sensitive-file-exfiltration"
+  });
+  assertFinding(findings, {
+    code: "security-injection-phrase",
+    file: ".ai/memory/operations.md",
+    line: 5,
+    patternClass: "instruction-override"
+  });
 });
 
 test("security scan leaves a realistic benign workspace clean", async () => {

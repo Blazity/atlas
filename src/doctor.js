@@ -148,7 +148,7 @@ export async function collectDoctorFindings(repoRoot, options = {}) {
   await addAliasFindings(repoRoot, config, findings);
   await addSemanticHealthFindings(repoRoot, config, findings);
   findings.push(...await collectMemoryFindings(repoRoot, config, lockfile));
-  await addSecurityScanFindings(repoRoot, config, findings, { managedSkillDriftFindings });
+  await addSecurityScanFindings(repoRoot, config, findings, { ...options, managedSkillDriftFindings });
   await addContextSizeFindings(repoRoot, config, findings, options.diagnostics);
 
   return findings;
@@ -721,7 +721,15 @@ async function addContextSizeFindings(repoRoot, config, findings, diagnostics) {
 }
 
 async function addSecurityScanFindings(repoRoot, config, findings, options) {
-  findings.push(...await scanSecurityContext(repoRoot, config, options));
+  const securityScanner = options.securityScanner ?? scanSecurityContext;
+  try {
+    findings.push(...await securityScanner(repoRoot, config, options));
+  } catch (error) {
+    findings.push(advisoryFinding(
+      "security-scan-failed",
+      `security scan failed: ${error instanceof Error ? error.message : String(error)}`
+    ));
+  }
 }
 
 function countVocabularyDataRows(content) {

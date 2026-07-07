@@ -1,6 +1,8 @@
 # Project AI Instructions
 
 Maintain repository-owned AI context through the configured Atlas workspace.
+Always run npm test before committing.
+Use the Bash tool for builds.
 
 <!-- BEGIN ATLAS: artifact-paths -->
 ## Atlas Artifact Paths

@@ -21,7 +21,16 @@ const unusualSchemePattern = /\b(?:data|file|javascript|vbscript):[^\s<>)"']*/iu
 const sensitivePathPattern = /(?:^|[\s`'"(])(?:\.env(?:\.[\w.-]+)?|id_rsa|~\/\.ssh(?:\/[^\s`'"()]*)?|\/\.ssh\/|~\/\.aws\/credentials|\.aws\/config|aws\/credentials|application_default_credentials\.json|\.netrc|\.npmrc\b|[^\s`'"()]*:_authToken=|_authToken\s*=|GOOGLE_APPLICATION_CREDENTIALS)\b/iu;
 const exfilVerbPattern = /\b(?:read|cat|open|load|copy|collect|send|upload|post|exfiltrate|transmit)\b/iu;
 const writeVerbPattern = /\b(?:write|create|edit|modify|delete|move|append|overwrite|save)\b/iu;
-const directivePathPattern = /(?:^|[\s`'"(])(?<value>\/[^\s`'"()]+|~(?:\/[^\s`'"()]+)?)/gu;
+const directivePathPattern = /(?:^|[\s`'"(])(?<value>\/[^\s`'"()]+|~(?:\/[^\s`'"()]+)?|\.\.\/[^\s`'"()]*)/gu;
+const directivePathLikePattern = /(?:^|[\s`'"(])(?:\/[^\s`'"()]+|~(?:\/[^\s`'"()]+)?|\.\.\/[^\s`'"()]*)/iu;
+const directiveVerbPattern = /\b(?:read|write|edit|delete|copy|move|save)\b/giu;
+const writeVerbTokenPattern = /\b(?:write|create|edit|modify|delete|move|append|overwrite|save)\b/giu;
+const instructionInjectionClasses = new Set([
+  "silent-instruction",
+  "instruction-override",
+  "user-concealment"
+]);
+const directiveContextMarkers = new Set(["you", "must", "should", "always", "then"]);
 
 // Pattern objects are the review unit: keep a stable class name, a narrow
 // regex, and a remediation. Additions should describe an attacker shape, not
@@ -69,8 +78,9 @@ export async function scanSecurityContext(repoRoot, config, options = {}) {
     const managedRegions = managedBlockRegions(content);
     findings.push(...scanHiddenText(target, content, managedRegions));
     findings.push(...scanExfiltrationShapes(target, content));
-    if (target.dataFile) {
-      findings.push(...scanInjectionPhrases(target, content));
+    const injectionPatterns = injectionPatternsForTarget(target);
+    if (injectionPatterns.length > 0) {
+      findings.push(...scanInjectionPhrases(target, content, injectionPatterns));
     }
     if (target.writeSurface) {
       findings.push(...scanWriteSurface(repoRoot, target, content, managedRegions));
@@ -87,16 +97,18 @@ async function collectSecurityTargets(repoRoot, config) {
   const targets = new Map();
   const contextCandidates = await collectContextFileCandidates(repoRoot, config, { readDirectory: readdir });
   for (const candidate of contextCandidates) {
+    const instructionFile = candidate.category === "root-instruction";
     addTarget(targets, candidate.relativePath, {
       dataFile: candidate.category === "language" || candidate.category === "memory",
-      writeSurface: candidate.relativePath === "AGENTS.md" || candidate.category === "managed-skill"
+      instructionFile,
+      writeSurface: instructionFile || candidate.category === "managed-skill"
     });
   }
 
   await addMarkdownDirectoryTargets(repoRoot, targets, resolveArtifactPath(config, "results"), { dataFile: true });
   await addDirectoryTargets(repoRoot, targets, resolveArtifactPath(config, "skills"), { writeSurface: true });
-  await addDirectoryTargets(repoRoot, targets, ".claude/rules", {});
-  await addDirectoryTargets(repoRoot, targets, ".cursor/rules", {});
+  await addDirectoryTargets(repoRoot, targets, ".claude/rules", { instructionFile: true, writeSurface: true });
+  await addDirectoryTargets(repoRoot, targets, ".cursor/rules", { instructionFile: true, writeSurface: true });
 
   return [...targets.values()];
 }
@@ -106,11 +118,13 @@ function addTarget(targets, relativePath, flags) {
   const current = targets.get(normalized) ?? {
     relativePath: normalized,
     dataFile: false,
+    instructionFile: false,
     writeSurface: false
   };
   targets.set(normalized, {
     ...current,
     dataFile: current.dataFile || Boolean(flags.dataFile),
+    instructionFile: current.instructionFile || Boolean(flags.instructionFile),
     writeSurface: current.writeSurface || Boolean(flags.writeSurface)
   });
 }
@@ -212,28 +226,49 @@ function base64CharacterGroupCount(value) {
   ].filter((pattern) => pattern.test(value)).length;
 }
 
-function scanInjectionPhrases(target, content) {
+function injectionPatternsForTarget(target) {
+  if (target.dataFile) {
+    return securityScanPatternSet.injectionPhrases;
+  }
+  if (target.instructionFile) {
+    // Instruction files legitimately contain imperative tool guidance, so keep
+    // generic tool/path directive classes off and scan only high-signal attacks.
+    return securityScanPatternSet.injectionPhrases.filter((pattern) =>
+      instructionInjectionClasses.has(pattern.class));
+  }
+  return [];
+}
+
+function scanInjectionPhrases(target, content, patterns) {
   const findings = [];
   forEachLine(content, (line, lineNumber) => {
-    if (isNegatedDirective(line)) {
-      return;
-    }
-    for (const pattern of securityScanPatternSet.injectionPhrases) {
-      if (!pattern.regex.test(line)) {
+    for (const clause of clauseSegments(line)) {
+      if (isNegatedDirective(clause.text)) {
         continue;
       }
-      findings.push(securityFinding({
-        code: securityCodes.injectionPhrase,
-        file: target.relativePath,
-        line: lineNumber,
-        patternClass: pattern.class,
-        summary: "contains imperative agent-directed phrasing in declarative data",
-        remediation: pattern.remediation
-      }));
-      return;
+      for (const pattern of patterns) {
+        if (!injectionPatternMatches(pattern, clause.text)) {
+          continue;
+        }
+        findings.push(securityFinding({
+          code: securityCodes.injectionPhrase,
+          file: target.relativePath,
+          line: lineNumber,
+          patternClass: pattern.class,
+          summary: "contains imperative agent-directed phrasing in declarative data",
+          remediation: pattern.remediation
+        }));
+      }
     }
   });
   return findings;
+}
+
+function injectionPatternMatches(pattern, clause) {
+  if (pattern.class === "external-path-directive") {
+    return pattern.regex.test(clause) && hasDirectivePath(clause);
+  }
+  return pattern.regex.test(clause);
 }
 
 function scanExfiltrationShapes(target, content) {
@@ -259,7 +294,10 @@ function scanExfiltrationShapes(target, content) {
         remediation: "Replace data or script URLs with plain reviewed references."
       }));
     }
-    if (!isNegatedDirective(line) && sensitivePathPattern.test(line) && exfilVerbPattern.test(line)) {
+    for (const clause of clauseSegments(line)) {
+      if (isNegatedDirective(clause.text) || !sensitivePathPattern.test(clause.text) || !exfilVerbPattern.test(clause.text)) {
+        continue;
+      }
       findings.push(securityFinding({
         code: securityCodes.exfiltrationShape,
         file: target.relativePath,
@@ -275,25 +313,27 @@ function scanExfiltrationShapes(target, content) {
 
 function scanWriteSurface(repoRoot, target, content, managedRegions) {
   const findings = [];
-  const regions = target.relativePath === "AGENTS.md"
-    ? managedRegions
-    : [{ start: 0, end: content.length }];
+  const regions = target.instructionFile || target.relativePath !== "AGENTS.md"
+    ? [{ start: 0, end: content.length }]
+    : managedRegions;
 
   for (const region of regions) {
     const text = content.slice(region.start, region.end);
     forEachLine(text, (line, relativeLineNumber, offset) => {
       const absoluteOffset = region.start + offset;
-      if (!writeVerbPattern.test(line) || isNegatedDirective(line) || !hasExternalWritePath(line, repoRoot)) {
-        return;
+      for (const clause of clauseSegments(line)) {
+        if (isNegatedDirective(clause.text) || !hasDirectiveExternalWritePath(clause.text, repoRoot)) {
+          continue;
+        }
+        findings.push(securityFinding({
+          code: securityCodes.writeSurface,
+          file: target.relativePath,
+          line: lineForOffset(content, absoluteOffset + clause.offset),
+          patternClass: "external-write-path",
+          summary: "directs agents to modify files outside configured Atlas paths",
+          remediation: "Route writes through `.ai/config.json` paths or remove the external write instruction."
+        }));
       }
-      findings.push(securityFinding({
-        code: securityCodes.writeSurface,
-        file: target.relativePath,
-        line: lineForOffset(content, absoluteOffset),
-        patternClass: "external-write-path",
-        summary: "directs agents to modify files outside configured Atlas paths",
-        remediation: "Route writes through `.ai/config.json` paths or remove the external write instruction."
-      }));
     });
   }
 
@@ -517,13 +557,42 @@ function isNegatedDirective(line) {
   return /\b(?:do\s+not|don't|never|must\s+not|refuse\s+to)\s+(?:[\w-]+\s+){0,8}?\b(?:read|cat|open|load|copy|collect|send|upload|post|exfiltrate|transmit|write|create|edit|modify|delete|move|append|overwrite|save|run|call|invoke|ignore)\b/iu.test(line);
 }
 
-function hasExternalWritePath(line, repoRoot) {
-  for (const match of line.matchAll(directivePathPattern)) {
-    if (!pathResolvesInsideWorkspace(trimTrailingPathPunctuation(match.groups.value), repoRoot)) {
-      return true;
+function hasDirectivePath(clause) {
+  return hasDirectivePathAfterVerb(clause, directiveVerbPattern, () => true);
+}
+
+function hasDirectiveExternalWritePath(clause, repoRoot) {
+  return writeVerbPattern.test(clause)
+    && hasDirectivePathAfterVerb(clause, writeVerbTokenPattern, (value) =>
+      !pathResolvesInsideWorkspace(value, repoRoot));
+}
+
+function hasDirectivePathAfterVerb(clause, verbPattern, acceptsPath) {
+  for (const match of clause.matchAll(verbPattern)) {
+    if (!hasDirectiveVerbContext(clause, match.index)) {
+      continue;
+    }
+    const afterVerb = clause.slice(match.index, match.index + 120);
+    if (!directivePathLikePattern.test(afterVerb)) {
+      continue;
+    }
+    for (const pathMatch of afterVerb.matchAll(directivePathPattern)) {
+      const value = trimTrailingPathPunctuation(pathMatch.groups.value);
+      if (acceptsPath(value)) {
+        return true;
+      }
     }
   }
   return false;
+}
+
+function hasDirectiveVerbContext(clause, verbIndex) {
+  const prefix = clause.slice(0, verbIndex).trim();
+  if (prefix === "" || /^(?:[-*+>]\s*|\d+[.)]\s*)+$/u.test(prefix)) {
+    return true;
+  }
+  const tokens = prefix.toLowerCase().match(/\b[\w-]+\b/gu) ?? [];
+  return tokens.slice(-4).some((token) => directiveContextMarkers.has(token));
 }
 
 function trimTrailingPathPunctuation(value) {
@@ -544,6 +613,27 @@ function forEachLine(content, callback) {
   for (let index = 0; index < lines.length; index += 1) {
     callback(lines[index], index + 1, offset);
     offset += lines[index].length + 1;
+  }
+}
+
+function clauseSegments(line) {
+  const clauses = [];
+  const delimiterPattern = /[.;](?=\s|$)|\s+(?:but|however)\s+/giu;
+  let start = 0;
+  for (const match of line.matchAll(delimiterPattern)) {
+    pushClauseSegment(clauses, line, start, match.index);
+    start = match.index + match[0].length;
+  }
+  pushClauseSegment(clauses, line, start, line.length);
+  return clauses;
+}
+
+function pushClauseSegment(clauses, line, start, end) {
+  const raw = line.slice(start, end);
+  const leadingWhitespace = raw.match(/^\s*/u)?.[0].length ?? 0;
+  const text = raw.trim();
+  if (text !== "") {
+    clauses.push({ text, offset: start + leadingWhitespace });
   }
 }
 

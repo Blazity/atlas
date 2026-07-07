@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "atlasVersion": "0.4.0",
+  "atlasVersion": "0.5.0",
   "files": {
     ".ai/skills/atlas-compact/SKILL.md": {
       "sha256": "468185810fb00a9ae586710d398b6e4e1584e732a0a872ccc74e3967c300e5a4",

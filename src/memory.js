@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -39,10 +39,10 @@ export async function parseMemoryEntries(repoRoot, config, options = {}) {
   return entries;
 }
 
-export async function collectMemoryFindings(repoRoot, config, lockfile) {
+export async function collectMemoryFindings(repoRoot, config, lockfile, options = {}) {
   const entries = await parseMemoryEntries(repoRoot, config);
   return [
-    ...await memoryLifecycleFindings(repoRoot, entries),
+    ...await memoryLifecycleFindings(repoRoot, entries, options),
     ...await sharedMemoryFindings(repoRoot, config, lockfile)
   ];
 }
@@ -58,6 +58,8 @@ export async function pullSharedMemory(repoRoot, config, root, options = {}) {
   const checkoutPath = path.join(tempRoot, "source");
   const sharedRelativePath = normalizePath(path.join(resolveArtifactPath(config, "memory"), "shared"));
   const sharedAbsolutePath = repoPath(repoRoot, sharedRelativePath);
+  const sharedParentPath = path.dirname(sharedAbsolutePath);
+  const stagedSharedPath = path.join(sharedParentPath, `.shared-staging-${process.pid}-${Date.now()}`);
 
   try {
     await mkdir(checkoutPath, { recursive: true });
@@ -70,9 +72,8 @@ export async function pullSharedMemory(repoRoot, config, root, options = {}) {
     if (!sourceRoot) {
       return { ok: false, error: "shared memory source must contain .ai/memory or memory" };
     }
-    await rm(sharedAbsolutePath, { recursive: true, force: true });
-    await mkdir(sharedAbsolutePath, { recursive: true });
-    const copied = await copyMemoryFiles(sourceRoot, sharedAbsolutePath);
+    await mkdir(stagedSharedPath, { recursive: true });
+    const copied = await copyMemoryFiles(sourceRoot, stagedSharedPath);
 
     const previous = await readLockfile(repoRoot, root);
     const files = await computeLockfileFiles(repoRoot, config, previous);
@@ -82,10 +83,10 @@ export async function pullSharedMemory(repoRoot, config, root, options = {}) {
       pin: sharedConfig.pin,
       files: Object.fromEntries(copied.files.map((file) => [file.relativePath, { sha256: file.sha256 }]))
     };
-    await writeText(
-      repoPath(repoRoot, lockfileRelativePath(root)),
-      lockfileContent(packageVersion, files, { memory: { shared } })
-    );
+    const nextLockfileContent = lockfileContent(packageVersion, files, { memory: { shared } });
+    await replaceSharedMemoryTree(sharedAbsolutePath, stagedSharedPath, async () => {
+      await writeText(repoPath(repoRoot, lockfileRelativePath(root)), nextLockfileContent);
+    });
 
     return {
       ok: true,
@@ -98,7 +99,41 @@ export async function pullSharedMemory(repoRoot, config, root, options = {}) {
   } catch (error) {
     return { ok: false, error: error.message };
   } finally {
+    await rm(stagedSharedPath, { recursive: true, force: true });
     await rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
+async function replaceSharedMemoryTree(targetPath, stagedPath, writeLockfile) {
+  const backupPath = `${targetPath}.backup-${process.pid}-${Date.now()}`;
+  let backupCreated = false;
+  let stagedInstalled = false;
+
+  try {
+    await rm(backupPath, { recursive: true, force: true });
+    if (await isDirectory(targetPath)) {
+      await rename(targetPath, backupPath);
+      backupCreated = true;
+    } else {
+      await rm(targetPath, { recursive: true, force: true });
+    }
+
+    await rename(stagedPath, targetPath);
+    stagedInstalled = true;
+    await writeLockfile();
+
+    if (backupCreated) {
+      await rm(backupPath, { recursive: true, force: true });
+      backupCreated = false;
+    }
+  } catch (error) {
+    if (stagedInstalled) {
+      await rm(targetPath, { recursive: true, force: true });
+    }
+    if (backupCreated) {
+      await rename(backupPath, targetPath);
+    }
+    throw error;
   }
 }
 
@@ -196,7 +231,7 @@ function parseMemoryFile(content, relativePath, memoryRoot) {
   return entries;
 }
 
-async function memoryLifecycleFindings(repoRoot, entries) {
+async function memoryLifecycleFindings(repoRoot, entries, options = {}) {
   const findings = [];
   const malformedEntries = entries.filter((entry) => entry.metadataMalformed);
   const managedEntries = entries.filter((entry) => entry.metadataPresent && !entry.metadataMalformed);
@@ -218,7 +253,7 @@ async function memoryLifecycleFindings(repoRoot, entries) {
   for (const finding of duplicateIdFindings(managedEntries)) {
     findings.push(finding);
   }
-  for (const finding of duplicateFindings(managedEntries)) {
+  for (const finding of duplicateFindings(managedEntries, options)) {
     findings.push(finding);
   }
 
@@ -257,32 +292,112 @@ async function memoryLifecycleFindings(repoRoot, entries) {
   return findings;
 }
 
-function duplicateFindings(entries) {
+function duplicateFindings(entries, options = {}) {
   const findings = [];
   const comparableEntries = entries
     .map((entry) => ({ entry, profile: normalizedTokenProfile(entry.normalizedText) }))
     .filter(({ profile }) => profile.total > 0);
+  const tokenFrequencies = duplicateTokenFrequencies(comparableEntries);
+  const bucketedEntries = comparableEntries.map((candidate, index) => ({
+    ...candidate,
+    index,
+    prefixTokens: duplicatePrefixTokens(candidate.profile, tokenFrequencies)
+  }));
+  const candidatePairs = duplicateCandidatePairs(bucketedEntries);
 
-  for (let leftIndex = 0; leftIndex < comparableEntries.length; leftIndex += 1) {
-    for (let rightIndex = leftIndex + 1; rightIndex < comparableEntries.length; rightIndex += 1) {
-      const left = comparableEntries[leftIndex];
-      const right = comparableEntries[rightIndex];
-      const similarity = left.entry.normalizedText === right.entry.normalizedText
-        ? 1
-        : normalizedSimilarity(left.profile, right.profile);
-      if (similarity < nearDuplicateThreshold) {
-        continue;
-      }
-
-      findings.push(advisoryFinding(
-        "duplicate-memory-entry",
-        `memory entries ${entryLabel(left.entry)} and ${entryLabel(right.entry)} are near duplicates — merge them or supersede one entry`,
-        [entryLocation(left.entry), entryLocation(right.entry), `similarity: ${similarity.toFixed(2)}`]
-      ));
+  for (const [leftIndex, rightIndex] of candidatePairs) {
+    const left = bucketedEntries[leftIndex];
+    const right = bucketedEntries[rightIndex];
+    options.onDuplicateComparison?.(left.entry, right.entry);
+    const similarity = left.entry.normalizedText === right.entry.normalizedText
+      ? 1
+      : normalizedSimilarity(left.profile, right.profile);
+    if (similarity < nearDuplicateThreshold) {
+      continue;
     }
+
+    findings.push(advisoryFinding(
+      "duplicate-memory-entry",
+      `memory entries ${entryLabel(left.entry)} and ${entryLabel(right.entry)} are near duplicates — merge them or supersede one entry`,
+      [entryLocation(left.entry), entryLocation(right.entry), `similarity: ${similarity.toFixed(2)}`]
+    ));
   }
 
   return findings;
+}
+
+function duplicateTokenFrequencies(entries) {
+  const frequencies = new Map();
+  for (const { profile } of entries) {
+    for (const token of profile.counts.keys()) {
+      frequencies.set(token, (frequencies.get(token) ?? 0) + 1);
+    }
+  }
+  return frequencies;
+}
+
+function duplicatePrefixTokens(profile, tokenFrequencies) {
+  const tokens = [];
+  for (const [token, count] of profile.counts.entries()) {
+    for (let index = 0; index < count; index += 1) {
+      tokens.push(token);
+    }
+  }
+  tokens.sort((left, right) => {
+    const frequencyDifference = (tokenFrequencies.get(left) ?? 0) - (tokenFrequencies.get(right) ?? 0);
+    return frequencyDifference || left.localeCompare(right);
+  });
+
+  return [...new Set(tokens.slice(0, duplicatePrefixLength(profile.total)))];
+}
+
+function duplicatePrefixLength(total) {
+  const shortestComparableTotal = Math.max(1, Math.ceil((nearDuplicateThreshold * total) / (2 - nearDuplicateThreshold)));
+  const minimumOverlap = Math.ceil((nearDuplicateThreshold * (total + shortestComparableTotal)) / 2);
+  return Math.max(1, total - minimumOverlap + 1);
+}
+
+function duplicateCandidatePairs(entries) {
+  const buckets = new Map();
+  const seenPairs = new Set();
+  const pairs = [];
+
+  for (const right of entries) {
+    const candidateIndexes = new Set();
+    for (const token of right.prefixTokens) {
+      for (const leftIndex of buckets.get(token) ?? []) {
+        candidateIndexes.add(leftIndex);
+      }
+    }
+
+    for (const leftIndex of [...candidateIndexes].sort((left, right) => left - right)) {
+      const left = entries[leftIndex];
+      if (!canReachNearDuplicateThreshold(left.profile.total, right.profile.total)) {
+        continue;
+      }
+
+      const pairKey = `${left.index}:${right.index}`;
+      if (seenPairs.has(pairKey)) {
+        continue;
+      }
+      seenPairs.add(pairKey);
+      pairs.push([left.index, right.index]);
+    }
+
+    for (const token of right.prefixTokens) {
+      const bucket = buckets.get(token) ?? [];
+      bucket.push(right.index);
+      buckets.set(token, bucket);
+    }
+  }
+
+  return pairs.sort(([leftIndex, leftRightIndex], [rightIndex, rightRightIndex]) => (
+    leftIndex - rightIndex || leftRightIndex - rightRightIndex
+  ));
+}
+
+function canReachNearDuplicateThreshold(leftTotal, rightTotal) {
+  return (2 * Math.min(leftTotal, rightTotal)) / (leftTotal + rightTotal) >= nearDuplicateThreshold;
 }
 
 function duplicateIdFindings(entries) {

@@ -236,6 +236,56 @@ test("near-duplicate detection stays bounded for a few hundred memory entries", 
   });
 });
 
+test("near-duplicate detection buckets 4000 distinct memory entries before comparing", async () => {
+  await withTempRepo(async (directory) => {
+    const config = createDefaultConfig();
+    await mkdir(path.join(directory, ".ai/memory"), { recursive: true });
+    const sections = ["# Lessons", ""];
+    for (let index = 0; index < 4000; index += 1) {
+      const body = index < 2
+        ? [
+          index === 0 ? "leftone lefttwo leftthree" : "rightone righttwo rightthree",
+          "sharedalpha sharedbeta sharedgamma shareddelta sharedepsilon sharedzeta sharedeta sharedtheta sharediota sharedkappa"
+        ].join(" ")
+        : [
+          `topic-${index}`,
+          `decision-${index}`,
+          `repository-${index}`,
+          `workflow-${index}`,
+          `constraint-${index}`,
+          `evidence-${index}`,
+          `review-${index}`,
+          `release-${index}`
+        ].join(" ");
+
+      sections.push(
+        `## Entry ${index}`,
+        `<!-- atlas: id=entry-${index} verified=2999-01-01 scope=repo -->`,
+        "",
+        body,
+        ""
+      );
+    }
+    await writeFile(path.join(directory, ".ai/memory/lessons.md"), sections.join("\n"));
+
+    let comparisonCount = 0;
+    const findings = await collectMemoryFindings(
+      directory,
+      config,
+      { exists: false, files: {}, memory: {}, error: null },
+      { onDuplicateComparison: () => { comparisonCount += 1; } }
+    );
+    const fullPairCount = (4000 * 3999) / 2;
+
+    assert.equal(findings.filter((finding) => finding.code === "duplicate-memory-entry").length, 0);
+    assert(comparisonCount > 0, "duplicate comparison counter was not called");
+    assert(
+      comparisonCount < fullPairCount / 100,
+      `near-duplicate scan compared ${comparisonCount} pairs; full pairwise would compare ${fullPairCount}`
+    );
+  });
+});
+
 test("init scaffolds the memory gitignore, managed atlas-memory skill, and session protocol", async () => {
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });
@@ -378,6 +428,42 @@ test("atlas memory pull rejects oversized markdown files clearly", async () => {
 
       assert.equal(result.exitCode, 2);
       assert.match(result.stderr, /huge\.md exceeds the 1 MiB shared memory file limit/);
+    });
+  } finally {
+    await rm(orgRepo, { recursive: true, force: true });
+  }
+});
+
+test("atlas memory pull keeps existing shared memory and lockfile after invalid later pin", async () => {
+  const orgRepo = await createOrgMemoryRepo();
+  try {
+    await withTempRepo(async (directory) => {
+      const config = await initConfiguredWorkspace(directory);
+      const goodPin = await gitCommitSha(orgRepo);
+      config.memory = { shared: { source: `file://${orgRepo}`, ref: "main", pin: goodPin } };
+      await writeConfig(directory, config);
+
+      const goodPull = await runCli(["memory", "pull"], { cwd: directory });
+      const sharedPath = path.join(directory, ".ai/memory/shared/lessons.md");
+      const lockPath = path.join(directory, ".ai/atlas.lock.json");
+      const goodContent = await readFile(sharedPath, "utf8");
+      const goodLock = await readFile(lockPath, "utf8");
+
+      await writeFile(path.join(orgRepo, "memory/huge.md"), `${"a".repeat(1024 * 1024 + 1)}\n`);
+      await commitAll(orgRepo, "add invalid oversized memory");
+      config.memory.shared.pin = await gitCommitSha(orgRepo);
+      await writeConfig(directory, config);
+
+      const failedPull = await runCli(["memory", "pull"], { cwd: directory });
+      const afterContent = await readFile(sharedPath, "utf8");
+      const afterLock = await readFile(lockPath, "utf8");
+
+      assert.equal(goodPull.exitCode, 0);
+      assert.equal(failedPull.exitCode, 2);
+      assert.match(failedPull.stderr, /huge\.md exceeds the 1 MiB shared memory file limit/);
+      assert.equal(afterContent, goodContent);
+      assert.equal(afterLock, goodLock);
+      assert.equal(JSON.parse(afterLock).memory.shared.pin, goodPin);
     });
   } finally {
     await rm(orgRepo, { recursive: true, force: true });

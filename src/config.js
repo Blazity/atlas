@@ -1,5 +1,7 @@
 import path from "node:path";
 
+import { packageVersion, parseVersion } from "./version.js";
+
 const requiredPaths = ["language", "memory", "plans", "research", "decisions", "adrs", "results", "skills"];
 const setupStates = ["scaffolded", "configured"];
 const agentSurfaceNames = ["claude", "agents", "cursor"];
@@ -51,6 +53,7 @@ export function createConfigForTemplate(templateName = "standard", root = ".ai")
 
   return {
     schemaVersion: 1,
+    atlasVersion: packageVersion,
     template: template.name,
     setupState: "scaffolded",
     artifactRoot: root,
@@ -93,6 +96,10 @@ export function validateConfig(config) {
 
   if (config.schemaVersion !== 1) {
     errors.push("schemaVersion must be 1");
+  }
+
+  if (config.atlasVersion !== undefined && !parseVersion(config.atlasVersion)) {
+    errors.push("atlasVersion must be a semver version string (X.Y.Z)");
   }
 
   if (config.template !== undefined && !getTemplateNames().includes(config.template)) {

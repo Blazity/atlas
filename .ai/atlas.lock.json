@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "atlasVersion": "0.5.0",
+  "files": {
+    ".ai/skills/atlas-compact/SKILL.md": {
+      "sha256": "468185810fb00a9ae586710d398b6e4e1584e732a0a872ccc74e3967c300e5a4",
+      "packaged": "468185810fb00a9ae586710d398b6e4e1584e732a0a872ccc74e3967c300e5a4"
+    },
+    ".ai/skills/atlas-review/SKILL.md": {
+      "sha256": "68bc9510c2bae2cea376b3a39996c5fb53a762264e284d8ebcd6d52284f094be",
+      "packaged": "68bc9510c2bae2cea376b3a39996c5fb53a762264e284d8ebcd6d52284f094be"
+    },
+    ".ai/skills/atlas-setup/SKILL.md": {
+      "sha256": "7042f1eabe0c221b97ab2beb88af49768d8a1617a5a27a4b0ca18c7471b5d6d9",
+      "packaged": "7042f1eabe0c221b97ab2beb88af49768d8a1617a5a27a4b0ca18c7471b5d6d9"
+    },
+    ".ai/skills/atlas-setup/customization.md": {
+      "sha256": "4dd8f5b2450925e713caded25aad967c1491f0810d18e277ed5c4797407213fd",
+      "packaged": "4dd8f5b2450925e713caded25aad967c1491f0810d18e277ed5c4797407213fd"
+    }
+  }
+}

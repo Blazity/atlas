@@ -11,8 +11,18 @@ import {
   validateConfig
 } from "./config.js";
 import { analyzeContextSizes, contextSizeFinding } from "./context-size.js";
+import {
+  baselineEntry,
+  computeLockfileFiles,
+  lockfileContent,
+  lockfileRelativePath,
+  managedFileRelativePath,
+  readLockfile,
+  sha256
+} from "./lockfile.js";
 import { applyManagedBlock, inspectManagedBlock } from "./managed-blocks.js";
-import { fileExists, readTextIfExists, repoPath } from "./repo.js";
+import { fileExists, readTextIfExists, repoPath, writeText } from "./repo.js";
+import { compareVersions, packageVersion, parseVersion } from "./version.js";
 import {
   agentManagedBlock,
   defaultCompactSkillMd,
@@ -23,7 +33,9 @@ import {
   defaultReviewSkillMd,
   defaultSetupSkillMd,
   defaultMemoryReadme,
-  managedBlockId
+  managedBlockId,
+  managedSkillFiles,
+  packagedSkillFileContent
 } from "./templates.js";
 
 const defaultRoot = ".ai";
@@ -100,6 +112,22 @@ export async function collectDoctorFindings(repoRoot, options = {}) {
     return findings;
   }
 
+  if (loaded.exists) {
+    addVersionStampFindings(config, findings);
+  }
+
+  const lockfile = await readLockfile(repoRoot, root);
+  if (lockfile.error) {
+    findings.push(manualFinding("invalid-lockfile", `${lockfileRelativePath(root)} is not valid JSON: ${lockfile.error}`));
+  } else if (loaded.exists && !lockfile.exists) {
+    findings.push(fixableFinding("missing-lockfile", `${lockfileRelativePath(root)} is missing — it records managed-skill baselines`, {
+      type: "write",
+      relativePath: lockfileRelativePath(root),
+      absolutePath: repoPath(repoRoot, lockfileRelativePath(root)),
+      content: lockfileContent(packageVersion, await computeLockfileFiles(repoRoot, config, lockfile))
+    }));
+  }
+
   await addRootPointerFindings(repoRoot, root, findings);
   await addRequiredArtifactFindings(repoRoot, config, findings);
   await addGitkeepFindings(repoRoot, config, findings);
@@ -107,7 +135,7 @@ export async function collectDoctorFindings(repoRoot, options = {}) {
   // array order, so a legacy file is relocated before any managed write lands
   // on the new path (a write-first order would trip the move overwrite guard).
   await addLegacySkillMigrationFindings(repoRoot, config, findings);
-  await addMaintenanceSkillFindings(repoRoot, config, findings);
+  await addMaintenanceSkillFindings(repoRoot, config, findings, { lockfile, resetSkills: Boolean(options.resetSkills) });
   await addManagedFileFindings(repoRoot, root, findings);
   await addSkillLinkFindings(repoRoot, config, findings);
   await addPlaceholderFindings(repoRoot, config, findings);
@@ -123,6 +151,83 @@ export async function applyFixes(findings) {
     if (finding.fixable && finding.action) {
       await applyAction(finding.action);
     }
+  }
+}
+
+// Stamp maintenance and lockfile baselines run after every successful mutation
+// (init and doctor --fix), so the workspace always records which package
+// version last wrote it and which managed-file contents it installed.
+export async function finalizeWorkspaceMetadata(repoRoot) {
+  const loaded = await loadConfig(repoRoot);
+  if (!loaded.exists || loaded.errors.length > 0) {
+    return;
+  }
+
+  if (loaded.config.atlasVersion !== packageVersion) {
+    const { schemaVersion, atlasVersion, ...rest } = loaded.config;
+    const next = { schemaVersion, atlasVersion: packageVersion, ...rest };
+    await writeText(configPath(repoRoot, loaded.root), `${JSON.stringify(next, null, 2)}\n`);
+  }
+
+  const previous = await readLockfile(repoRoot, loaded.root);
+  if (previous.error) {
+    return;
+  }
+  const files = await computeLockfileFiles(repoRoot, loaded.config, previous);
+  const content = lockfileContent(packageVersion, files);
+  const absolutePath = repoPath(repoRoot, lockfileRelativePath(loaded.root));
+  if ((await readTextIfExists(absolutePath)) !== content) {
+    await writeText(absolutePath, content);
+  }
+}
+
+// Records the current content of every managed skill file as its baseline, so
+// deliberate customizations stop reporting as customized-skill advisories.
+export async function adoptSkills(repoRoot) {
+  const loaded = await loadConfig(repoRoot);
+  // An unreadable config falls back to template defaults, which would compute
+  // baselines against the wrong root — refuse instead of guessing.
+  if (!loaded.exists || loaded.errors.length > 0) {
+    return null;
+  }
+  const adopted = [];
+  const files = {};
+
+  for (const [skillName, fileName] of managedSkillFiles) {
+    const relativePath = managedFileRelativePath(loaded.config, skillName, fileName);
+    const current = await readTextIfExists(repoPath(repoRoot, relativePath));
+    if (current === null) {
+      continue;
+    }
+    const packaged = packagedSkillFileContent(skillName, fileName);
+    files[relativePath] = { sha256: sha256(current), packaged: sha256(packaged) };
+    if (current !== packaged) {
+      adopted.push(relativePath);
+    }
+  }
+
+  const absolutePath = repoPath(repoRoot, lockfileRelativePath(loaded.root));
+  await writeText(absolutePath, lockfileContent(packageVersion, files));
+  return adopted;
+}
+
+function addVersionStampFindings(config, findings) {
+  const stamp = config.atlasVersion;
+  if (stamp === undefined || !parseVersion(stamp)) {
+    return;
+  }
+
+  const comparison = compareVersions(packageVersion, stamp);
+  if (comparison > 0) {
+    findings.push(advisoryFinding(
+      "atlas-version-behind",
+      `workspace was last written by Atlas ${stamp}; running ${packageVersion} — run atlas doctor --fix to update managed files and the stamp`
+    ));
+  } else if (comparison < 0) {
+    findings.push(manualFinding(
+      "atlas-version-ahead",
+      `workspace was written by Atlas ${stamp}, newer than the running CLI ${packageVersion} — upgrade the CLI; fixing with an older version would revert newer managed content (--force overrides)`
+    ));
   }
 }
 
@@ -274,8 +379,9 @@ async function addLegacySkillMigrationFindings(repoRoot, config, findings) {
   }
 }
 
-async function addMaintenanceSkillFindings(repoRoot, config, findings) {
+async function addMaintenanceSkillFindings(repoRoot, config, findings, driftOptions) {
   await addManagedSkillFileFinding(repoRoot, config, findings, {
+    ...driftOptions,
     skillName: "atlas-setup",
     fileName: "SKILL.md",
     content: defaultSetupSkillMd(),
@@ -284,6 +390,7 @@ async function addMaintenanceSkillFindings(repoRoot, config, findings) {
     description: "setup skill"
   });
   await addManagedSkillFileFinding(repoRoot, config, findings, {
+    ...driftOptions,
     skillName: "atlas-setup",
     fileName: "customization.md",
     content: defaultCustomizationMd(),
@@ -292,6 +399,7 @@ async function addMaintenanceSkillFindings(repoRoot, config, findings) {
     description: "setup customization instructions"
   });
   await addManagedSkillFileFinding(repoRoot, config, findings, {
+    ...driftOptions,
     skillName: "atlas-review",
     fileName: "SKILL.md",
     content: defaultReviewSkillMd(),
@@ -300,6 +408,7 @@ async function addMaintenanceSkillFindings(repoRoot, config, findings) {
     description: "review skill"
   });
   await addManagedSkillFileFinding(repoRoot, config, findings, {
+    ...driftOptions,
     skillName: "atlas-compact",
     fileName: "SKILL.md",
     content: defaultCompactSkillMd(),
@@ -310,7 +419,7 @@ async function addMaintenanceSkillFindings(repoRoot, config, findings) {
 }
 
 async function addManagedSkillFileFinding(repoRoot, config, findings, options) {
-  const relativePath = path.join(resolveArtifactPath(config, "skills"), options.skillName, options.fileName);
+  const relativePath = managedFileRelativePath(config, options.skillName, options.fileName);
   const absolutePath = repoPath(repoRoot, relativePath);
   const expectedContent = `${options.content}\n`;
   const kind = await getPathKind(absolutePath);
@@ -331,14 +440,48 @@ async function addManagedSkillFileFinding(repoRoot, config, findings, options) {
   }
 
   const currentContent = await readFile(absolutePath, "utf8");
-  if (currentContent !== expectedContent) {
-    findings.push(fixableFinding(options.staleCode, `${relativePath} differs from the managed Atlas ${options.description} version`, {
-      type: "write",
-      relativePath,
-      absolutePath,
-      content: expectedContent
-    }));
+  if (currentContent === expectedContent) {
+    return;
   }
+
+  // Three-way compare (ADR-0004). A baseline whose sha256 equals its packaged
+  // hash means the file was pristine when recorded, so a difference from the
+  // running package is plain staleness and overwriting is safe. An adopted
+  // baseline (hashes differ) protects the customization until the packaged
+  // copy changes again. Anything else is an unrecorded local edit.
+  const staleFinding = () => fixableFinding(options.staleCode, `${relativePath} differs from the managed Atlas ${options.description} version`, {
+    type: "write",
+    relativePath,
+    absolutePath,
+    content: expectedContent
+  });
+
+  if (options.resetSkills) {
+    findings.push(staleFinding());
+    return;
+  }
+
+  const baseline = options.lockfile ? baselineEntry(options.lockfile, relativePath) : null;
+  if (baseline && sha256(currentContent) === baseline.sha256) {
+    if (baseline.sha256 === baseline.packaged) {
+      findings.push(staleFinding());
+      return;
+    }
+    if (sha256(expectedContent) === baseline.packaged) {
+      // Adopted customization, packaged copy unchanged since adoption.
+      return;
+    }
+    findings.push(advisoryFinding(
+      "customized-skill",
+      `${relativePath} is an adopted customization, but the packaged ${options.description} changed since adoption — review the update, then re-run atlas doctor --adopt-skills (or overwrite with atlas doctor --fix --reset-skills)`
+    ));
+    return;
+  }
+
+  findings.push(advisoryFinding(
+    "customized-skill",
+    `${relativePath} differs from both the packaged ${options.description} and its recorded baseline — keep it with atlas doctor --adopt-skills, or overwrite it with atlas doctor --fix --reset-skills`
+  ));
 }
 
 async function addManagedFileFindings(repoRoot, root, findings) {

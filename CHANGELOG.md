@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-07-07
+
+### Added
+
+- Workspace version stamping: `init` and `doctor --fix` record the package
+  version as `atlasVersion` in `config.json`. A newer CLI reports an
+  `atlas-version-behind` advisory; an older CLI hits an `atlas-version-ahead`
+  manual conflict instead of silently reverting newer managed files
+  (`--force` overrides).
+- Managed-skill baselines in `atlas.lock.json` (machine-owned, written by
+  `init` and `doctor --fix`; a missing lockfile is fixable drift).
+- `doctor --adopt-skills` records current managed-skill contents as their
+  baselines; `doctor --fix --reset-skills` overwrites customized skills with
+  the packaged versions.
+- `atlas update` checks npm for a newer release and prints the pinned
+  upgrade command; `doctor --check-updates` reports the same check as an
+  advisory. These are the only commands that touch the network, and only
+  when explicitly invoked.
+
+### Changed
+
+- Managed skill files that differ from both the packaged version and their
+  recorded baseline are now `customized-skill` advisories (exit 0) instead of
+  fixable drift, and `doctor --fix` leaves them alone (ADR-0004). Workspaces
+  scaffolded before the lockfile existed classify old skill content as
+  customized once — run `doctor --fix --reset-skills` after upgrading if the
+  managed skills were never customized.
+
 ## [0.4.0] - 2026-07-06
 
 ### Added

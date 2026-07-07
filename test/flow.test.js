@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { planTreeLines, renderNextStepText, runInteractiveInit, summarizeDoctorPass } from "../src/ui/flow.js";
-import { applyFixes } from "../src/doctor.js";
+import { applyFixes, finalizeWorkspaceMetadata } from "../src/doctor.js";
 import { buildPlan } from "../src/plan.js";
 import { initNextStepText, setupHandoffPrompt } from "../src/templates.js";
 import { createGitRepo } from "./helpers/git.js";
@@ -157,6 +157,7 @@ test("--root skips the root question and roots the workspace at the given direct
 test("an existing workspace skips the root question and short-circuits without the launcher", async () => {
   await withTempRepo(async (dir) => {
     await applyFixes((await buildPlan(dir, { templateName: "standard" })).fixable);
+    await finalizeWorkspaceMetadata(dir);
     let detectCalls = 0;
     const io = makeIo({
       detectAgents: () => {
@@ -175,6 +176,7 @@ test("an existing workspace skips the root question and short-circuits without t
 test("an existing workspace root wins over --root in the interactive flow", async () => {
   await withTempRepo(async (dir) => {
     await applyFixes((await buildPlan(dir, { templateName: "standard" })).fixable);
+    await finalizeWorkspaceMetadata(dir);
 
     const exitCode = await runInteractiveInit({ cwd: dir, color: false, root: ".elsewhere", io: makeIo() });
 

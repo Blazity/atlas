@@ -1,16 +1,22 @@
-import { readFileSync } from "node:fs";
-
-import { classifyFindings, collectDoctorFindings, applyFixes, discoverWorkspaceRoot } from "./doctor.js";
+import {
+  adoptSkills,
+  applyFixes,
+  classifyFindings,
+  collectDoctorFindings,
+  discoverWorkspaceRoot,
+  finalizeWorkspaceMetadata
+} from "./doctor.js";
 import { runInit } from "./init.js";
 import { configPath, getTemplateNames, workspaceRootError } from "./config.js";
 import { buildContextSizeHandoffPrompt } from "./context-size.js";
 import { exitCodeForFindings, formatFindings } from "./output.js";
 import { describeDirtyStatus, fileExists, gitStatus, isGitRepo } from "./repo.js";
+import { runUpdateCheck, updateAdvisoryFinding } from "./update.js";
+import { packageVersion } from "./version.js";
 import { detectMode } from "./ui/runtime.js";
 import { runInteractiveInit } from "./ui/flow.js";
 import { colorizeDoctorOutput, doctorMark, offerContextSizeHandoff } from "./ui/doctor.js";
 
-const packageVersion = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
 const initFlags = ["dry-run", "force", "yes", "ci", "here", "template", "root"];
 
 export async function runCli(argv = process.argv.slice(2), options = {}) {
@@ -56,8 +62,16 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
     });
   }
 
+  if (parsed.command === "update") {
+    const validation = validateFlags(parsed.flags, []);
+    if (validation) {
+      return usageError(validation);
+    }
+    return runUpdateCheck({ cwd, fetchImpl: options.fetchImpl });
+  }
+
   if (parsed.command === "doctor") {
-    const validation = validateFlags(parsed.flags, ["fix", "force", "json", "handoff"]);
+    const validation = validateFlags(parsed.flags, ["fix", "force", "json", "handoff", "reset-skills", "adopt-skills", "check-updates"]);
     if (validation) {
       return usageError(validation);
     }
@@ -74,13 +88,65 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
     if (parsed.flags.has("handoff") && parsed.flags.get("handoff") !== "context-size") {
       return usageError("Unsupported handoff topic: use --handoff context-size");
     }
+    if (parsed.flags.has("reset-skills") && !parsed.flags.has("fix")) {
+      return usageError("--reset-skills requires --fix");
+    }
+    for (const flag of ["fix", "json", "handoff", "reset-skills", "check-updates"]) {
+      if (parsed.flags.has("adopt-skills") && parsed.flags.has(flag)) {
+        return usageError(`Cannot combine --adopt-skills with --${flag}`);
+      }
+    }
+    for (const flag of ["fix", "handoff"]) {
+      if (parsed.flags.has("check-updates") && parsed.flags.has(flag)) {
+        return usageError(`Cannot combine --check-updates with --${flag}`);
+      }
+    }
 
     if (!(await isGitRepo(cwd))) {
       return { exitCode: 2, stdout: "", stderr: "Refusing to inspect: current directory is not a git repository.\n" };
     }
 
+    if (parsed.flags.has("adopt-skills")) {
+      if (!(await workspaceInitialized(cwd))) {
+        return {
+          exitCode: 2,
+          stdout: "",
+          stderr: "Cannot adopt skills: Atlas is not set up in this repository. Run atlas init first.\n"
+        };
+      }
+      if (!parsed.flags.has("force")) {
+        const status = await gitStatus(cwd);
+        if (status) {
+          return {
+            exitCode: 2,
+            stdout: "",
+            stderr: `Refusing to adopt with a dirty git worktree. Commit/stash changes or pass --force.\n${describeDirtyStatus(status)}\n`
+          };
+        }
+      }
+      const adopted = await adoptSkills(cwd);
+      if (adopted === null) {
+        return {
+          exitCode: 2,
+          stdout: "",
+          stderr: "Cannot adopt skills: the Atlas config is missing or invalid. Run atlas doctor and resolve manual conflicts first.\n"
+        };
+      }
+      const body = adopted.length === 0
+        ? "No customized managed skill files found — baselines refreshed.\n"
+        : `Adopted baselines for ${adopted.length} customized managed skill file(s):\n${adopted.map((file) => `- ${file}`).join("\n")}\n`;
+      return { exitCode: 0, stdout: `Atlas doctor --adopt-skills\n\n${body}`, stderr: "" };
+    }
+
     const diagnostics = options.diagnostics ?? {};
-    const findings = await collectDoctorFindings(cwd, { diagnostics });
+    const findings = await collectDoctorFindings(cwd, { diagnostics, resetSkills: parsed.flags.has("reset-skills") });
+
+    if (parsed.flags.has("check-updates")) {
+      const advisory = await updateAdvisoryFinding(options.fetchImpl);
+      if (advisory) {
+        findings.push(advisory);
+      }
+    }
 
     if (parsed.flags.has("json")) {
       const exitCode = exitCodeForFindings(findings);
@@ -120,7 +186,12 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
 
     if (parsed.flags.has("fix")) {
       const manual = findings.filter((finding) => finding.severity === "manual");
-      if (manual.length > 0) {
+      // The downgrade guard is the one manual finding --force may override:
+      // reverting newer managed content with an older CLI is a deliberate act.
+      const blocking = parsed.flags.has("force")
+        ? manual.filter((finding) => finding.code !== "atlas-version-ahead")
+        : manual;
+      if (blocking.length > 0) {
         return { exitCode: 2, stdout: formatFindings(findings), stderr: "" };
       }
       const fixable = findings.filter((finding) => finding.fixable);
@@ -135,6 +206,7 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
         }
       }
       await applyFixes(findings);
+      await finalizeWorkspaceMetadata(cwd);
       return {
         exitCode: 0,
         stdout: `Atlas doctor --fix\n${formatFindings(findings, { emptyMessage: "No issues found.", fixableHeading: "Applied fixes:" })}`,
@@ -333,7 +405,9 @@ function helpText() {
 
 Usage:
   atlas init [--dry-run] [--force] [--yes] [--ci] [--here] [--template <name>] [--root <dir>]
-  atlas doctor [--fix] [--force] [--json] [--handoff context-size]
+  atlas doctor [--fix [--reset-skills]] [--force] [--json] [--check-updates]
+               [--adopt-skills] [--handoff context-size]
+  atlas update
   atlas --version
 
 Commands:
@@ -344,6 +418,8 @@ Commands:
   doctor --handoff context-size
                 Print a safe agent prompt for context-size cleanup; exits 0
                 when the prompt (or a no-op notice) is printed
+  update        Check npm for a newer Atlas release (network; never run
+                implicitly) and print the pinned upgrade command
 
 Options:
   --root <dir>       Workspace root for init (repo-relative; default .ai)
@@ -358,6 +434,12 @@ Options:
   --json             doctor only: print findings as JSON
   --handoff <topic>  doctor only: print an agent handoff prompt
                      (supported topic: context-size)
+  --reset-skills     doctor --fix only: overwrite customized managed skills
+                     with the packaged versions
+  --adopt-skills     doctor only: record current managed-skill contents as
+                     their baselines, keeping deliberate customizations
+  --check-updates    doctor only: also check npm for a newer release and
+                     report it as an advisory (network; exit code unchanged)
   --version, -v      Print the Atlas CLI version
 
 Exit codes (frozen contract):

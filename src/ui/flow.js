@@ -1,6 +1,6 @@
 import { cancel, confirm, intro, isCancel, log, note, outro, select, spinner, text } from "@clack/prompts";
 
-import { applyFixes, collectDoctorFindings, findingSeverity, loadConfig } from "../doctor.js";
+import { applyFixes, collectDoctorFindings, finalizeWorkspaceMetadata, findingSeverity, loadConfig } from "../doctor.js";
 import { gitStatus, isRepoSubdirectory } from "../repo.js";
 import { buildPlan } from "../plan.js";
 import { normalizePath, workspaceRootError } from "../config.js";
@@ -131,6 +131,7 @@ export async function runInteractiveInit({ cwd, templateName = "standard", color
   const write = spinner();
   write.start(`writing ${plan.actions.length} files…`);
   await applyFixes(plan.fixable);
+  await finalizeWorkspaceMetadata(cwd);
   write.stop(`Workspace written to ${plan.root}/ · ${plan.actions.length} files`);
 
   const doctor = spinner();

@@ -61,7 +61,7 @@ These are behaviors you can verify in two minutes, not promises:
 - **Preserves your content.** An existing `AGENTS.md` gets one fenced managed block appended; everything you wrote stays. Repairs never touch content outside managed blocks.
 - **Idempotent.** A second `init` prints `Already up to date — nothing to write.`
 - **Previewable.** `init --dry-run` shows every planned write and touches nothing.
-- **Plain files only.** No database, no daemon, no network calls. Uninstall = delete the workspace directory, the managed block in `AGENTS.md`, and three symlinks.
+- **Plain files only.** No database, no daemon; the only network call is the explicitly invoked update check (`atlas update` / `doctor --check-updates`). Uninstall = delete the workspace directory, the managed block in `AGENTS.md`, and three symlinks.
 
 ## One structure, everything in it
 
@@ -82,7 +82,7 @@ If your repo already keeps docs in conventional places (`docs/adrs`, `docs/specs
 
 ```yaml
 - name: Atlas structural gate
-  run: npx --yes @blazity-atlas/core@0.4.0 doctor   # pin the version your workspace was scaffolded with
+  run: npx --yes @blazity-atlas/core@0.5.0 doctor   # pin the version your workspace was scaffolded with
 ```
 
 The exit codes are a frozen contract:
@@ -96,6 +96,17 @@ The exit codes are a frozen contract:
 Advisories (setup pending, empty memory, oversized context) inform and never fail a build. `doctor --json` emits the findings as structured data for scripting. Pin the version rather than `@latest`: managed skill files are byte-compared, so upgrading the package and running `doctor --fix` belong in the same change.
 
 Context-size advisories watch the files agents actually load — `AGENTS.md`, `CLAUDE.md`, vocabulary, memory, decisions, managed skills — against heuristic character budgets informed by documented agent caps (for example, Codex reads at most 32 KiB of project docs by default). They are hints to compact, not model limits. When one fires, `atlas doctor --handoff context-size` prints a safe cleanup prompt for any agent, and the `atlas-compact` managed skill runs the full loop: measure with the CLI, propose a per-file plan, apply approved edits, re-run `doctor` for before/after proof.
+
+## Updating
+
+`atlas update` checks npm for a newer release — the only Atlas command that touches the network, and only when you run it — and prints the pinned upgrade command. `doctor --check-updates` runs the same check as a non-blocking advisory. `doctor` itself never goes online, so CI stays deterministic and offline.
+
+The workspace records how it was written, and `doctor` uses both records:
+
+- `config.json` carries `atlasVersion`, the package version that last wrote the workspace. A newer CLI reports a `atlas-version-behind` advisory until you run `doctor --fix`; an older CLI hits an `atlas-version-ahead` manual conflict instead of silently reverting newer managed files (`--force` is the explicit override).
+- `atlas.lock.json` records a content baseline for every managed skill file. A file that differs from the package but matches its baseline was never touched locally, so `--fix` updates it. A file that differs from both is a deliberate customization: `doctor` reports a `customized-skill` advisory and `--fix` leaves it alone. Keep the customization with `doctor --adopt-skills` (the advisory returns only when a later release changes that skill), or overwrite it with `doctor --fix --reset-skills`.
+
+Workspaces scaffolded before the lockfile existed classify old skill content as customized once — run `doctor --fix --reset-skills` after upgrading if you never customized the managed skills.
 
 ## Reviews that leave a verdict
 

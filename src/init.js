@@ -1,4 +1,4 @@
-import { applyFixes, loadConfig } from "./doctor.js";
+import { applyFixes, finalizeWorkspaceMetadata, loadConfig } from "./doctor.js";
 import { describeDirtyStatus, gitStatus, isGitRepo, isRepoSubdirectory } from "./repo.js";
 import { formatApplied, formatFindings } from "./output.js";
 import { normalizePath } from "./config.js";
@@ -47,6 +47,7 @@ export async function runInit(options) {
 
   if (!options.dryRun) {
     await applyFixes(plan.fixable);
+    await finalizeWorkspaceMetadata(cwd);
   }
 
   const title = options.dryRun ? "Atlas init dry run" : "Atlas init";

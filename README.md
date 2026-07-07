@@ -127,6 +127,10 @@ Advisories (setup pending, empty memory, memory lifecycle checks, shared-memory 
 
 Context-size advisories watch the files agents actually load — `AGENTS.md`, `CLAUDE.md`, vocabulary, memory, decisions, managed skills — against heuristic character budgets informed by documented agent caps (for example, Codex reads at most 32 KiB of project docs by default). They are hints to compact, not model limits. When one fires, `atlas doctor --handoff context-size` prints a safe cleanup prompt for any agent, and the `atlas-compact` managed skill runs the full loop: measure with the CLI, propose a per-file plan, apply approved edits, re-run `doctor` for before/after proof.
 
+### Security scanning
+
+`doctor` also scans committed AI context for prompt-injection shapes: hidden unicode, imperative instructions in comments or declarative memory, credential-bearing URLs, suspicious secret-file exfiltration instructions, broad skill `allowed-tools`, unreferenced executable skill files, and external write directives. These findings use `security-*` codes, are always advisories, appear in `doctor --json` with file and line evidence, and are never changed by `doctor --fix`.
+
 ## Updating
 
 `atlas update` checks npm for a newer release and prints the pinned upgrade command. `doctor --check-updates` runs the same check as a non-blocking advisory. `atlas memory pull` fetches only the configured `memory.shared` git source. `doctor` itself never goes online, so CI stays deterministic and offline.

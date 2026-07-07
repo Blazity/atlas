@@ -35,13 +35,19 @@ Atlas (by [Blazity](https://blazity.com)) gives the repository one place for all
 - 🩺 **Machine-checked** — `atlas doctor` verifies the structure in CI with frozen exit codes; `--fix` repairs drift deterministically
 - 🔒 **Nothing leaves your repo** — no telemetry, no network calls, one dependency, plain files only
 
+## Feature showcase
+
+A short demo of `atlas init`, the handoff prompt, and `atlas doctor`.
+
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/691767f7-8fc9-46fb-8864-42798fb77819" width="600" controls></video>
+</div>
+
 ## Quickstart
 
 ```bash
 npx --yes @blazity-atlas/core@latest init
 ```
-
-<!-- TODO(maintainer): embed demo recording here — assets/atlas-demo.gif (init → handoff prompt → doctor) -->
 
 One run scaffolds the workspace — config, vocabulary, memory, artifact directories, two managed skills, the AGENTS.md and CLAUDE.md entrypoints, and the agent symlinks — then prints a ready-to-paste handoff prompt. Your own coding agent takes it from there: it inspects the repository and fills the workspace with project-specific facts.
 

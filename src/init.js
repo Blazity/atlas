@@ -28,7 +28,8 @@ export async function runInit(options) {
   }
 
   const root = await resolveRequestedRoot(cwd, options.root);
-  const plan = await buildPlan(cwd, { templateName: options.templateName ?? "standard", root });
+  const profile = options.profile ?? "full";
+  const plan = await buildPlan(cwd, { templateName: options.templateName ?? "standard", root, profile });
 
   if (plan.conflicts.length > 0) {
     return { exitCode: 2, stdout: `Atlas init\n${formatFindings([...plan.conflicts, ...plan.fixable])}`, stderr: "" };
@@ -53,7 +54,7 @@ export async function runInit(options) {
   const title = options.dryRun ? "Atlas init dry run" : "Atlas init";
   const body = formatApplied(plan.actions, { dryRun: Boolean(options.dryRun) });
   const meta = `Template: ${plan.templateName}\nRoot: ${plan.root}\n`;
-  const nextStep = options.dryRun ? "" : `\n${initNextStepText(plan.root)}\n`;
+  const nextStep = options.dryRun ? "" : `\n${initNextStepText(plan.root, { profile: plan.profile })}\n`;
 
   return { exitCode: 0, stdout: `${title}\n\n${body}${meta}${nextStep}`, stderr: "" };
 }

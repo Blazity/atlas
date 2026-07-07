@@ -3,21 +3,29 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  configJsonSchema,
   configPath,
   createConfigForTemplate,
   createDefaultConfig,
   getTemplateNames,
+  lockfileJsonSchema,
   resolveArtifactPath,
   resolveAliasDestination,
   validateConfig
 } from "../src/config.js";
+import { packageVersion } from "../src/version.js";
+import { configValidationFixtures } from "./helpers/config-fixtures.js";
 
 test("creates the default config with root-relative paths and aliases", () => {
   const config = createDefaultConfig();
 
   assert.equal(config.schemaVersion, 1);
+  assert.equal(config.$schema, `https://unpkg.com/@blazity-atlas/core@${packageVersion}/schema/config.schema.json`);
+  assert.match(config.$schema, new RegExp(`@blazity-atlas/core@${packageVersion.replaceAll(".", "\\.")}/schema/config\\.schema\\.json$`, "u"));
   assert.equal(config.template, "standard");
   assert.equal(config.artifactRoot, ".ai");
+  assert.equal(config.features.managedSkills, true);
+  assert.deepEqual(config.doctor.suppress, []);
   assert.equal(config.paths.plans, "plans");
   assert.equal(config.paths.adrs, "decisions/adrs");
   assert.equal(config.pathAliases["docs/plans"], "plans");
@@ -53,6 +61,7 @@ test("scaffolds new configs with the setupState sentinel and all agent surfaces"
 
   assert.equal(config.setupState, "scaffolded");
   assert.deepEqual(config.agentSurfaces, ["claude", "agents", "cursor"]);
+  assert.deepEqual(Object.keys(config.features), ["plans", "research", "decisions", "results", "managedSkills", "agentSymlinks"]);
 });
 
 test("createConfigForTemplate accepts a workspace root and sets artifactRoot to it", () => {
@@ -77,6 +86,18 @@ test("validates agentSurfaces as an optional subset of known surfaces", () => {
   assert.deepEqual(validateConfig({ ...legacy, agentSurfaces: ["cursor", "agents"] }).errors, []);
   assert.match(validateConfig({ ...legacy, agentSurfaces: ["claude", "vscode"] }).errors.join("\n"), /agentSurfaces/);
   assert.match(validateConfig({ ...legacy, agentSurfaces: "claude" }).errors.join("\n"), /agentSurfaces/);
+});
+
+test("validates optional doctor suppression and feature flags", () => {
+  const { doctor, features, ...legacy } = createDefaultConfig();
+
+  assert.deepEqual(validateConfig(legacy).errors, []);
+  assert.deepEqual(validateConfig({ ...legacy, doctor: { suppress: ["setup-pending"] } }).errors, []);
+  assert.deepEqual(validateConfig({ ...legacy, features: { plans: false, managedSkills: true } }).errors, []);
+  assert.match(validateConfig({ ...legacy, doctor: { suppress: "setup-pending" } }).errors.join("\n"), /doctor\.suppress/);
+  assert.match(validateConfig({ ...legacy, features: { plans: "no" } }).errors.join("\n"), /features\.plans/);
+  assert.equal(doctor.suppress.length, 0);
+  assert.equal(features.plans, true);
 });
 
 test("configPath joins the workspace root with config.json", () => {
@@ -117,3 +138,122 @@ test("resolves alias destinations while preserving nested filenames", () => {
   );
   assert.equal(resolveAliasDestination(config, "docs/unknown/file.md"), null);
 });
+
+test("config schema fixtures stay aligned with hand-rolled validation", () => {
+  for (const fixture of configValidationFixtures.accept) {
+    assert.deepEqual(validateConfig(fixture).errors, []);
+    assert.deepEqual(validateWithSchema(fixture, configJsonSchema()), []);
+  }
+
+  for (const fixture of configValidationFixtures.reject) {
+    assert.notEqual(validateConfig(fixture).errors.length, 0);
+    assert.notEqual(validateWithSchema(fixture, configJsonSchema()).length, 0);
+  }
+});
+
+test("config schema rejects workspace escape path segments where expressible", () => {
+  const config = createDefaultConfig();
+  const schema = configJsonSchema();
+  const cases = [
+    { ...config, artifactRoot: "../outside" },
+    { ...config, paths: { ...config.paths, plans: "../plans" } },
+    { ...config, paths: { ...config.paths, research: "research/../../outside" } },
+    { ...config, pathAliases: { ...config.pathAliases, "../outside-alias": "plans" } },
+    { ...config, pathAliases: { ...config.pathAliases, "docs/escape": "../outside-target" } }
+  ];
+
+  for (const fixture of cases) {
+    assert.notEqual(validateConfig(fixture).errors.length, 0);
+    assert.notEqual(validateWithSchema(fixture, schema).length, 0);
+  }
+});
+
+test("published schemas are generated from the config module source of truth", async () => {
+  const configSchema = JSON.parse(await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("../schema/config.schema.json", import.meta.url), "utf8")));
+  const lockfileSchema = JSON.parse(await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("../schema/atlas-lock.schema.json", import.meta.url), "utf8")));
+
+  assert.deepEqual(configSchema, configJsonSchema());
+  assert.deepEqual(lockfileSchema, lockfileJsonSchema());
+});
+
+function validateWithSchema(value, schema) {
+  const errors = [];
+  validateSchemaNode(value, schema, "$", errors);
+  return errors;
+}
+
+function validateSchemaNode(value, schema, path, errors) {
+  if (schema.const !== undefined && value !== schema.const) {
+    errors.push(`${path} must equal ${schema.const}`);
+    return;
+  }
+  if (schema.enum && !schema.enum.includes(value)) {
+    errors.push(`${path} must be one of ${schema.enum.join(", ")}`);
+    return;
+  }
+  if (schema.type && !matchesType(value, schema.type)) {
+    errors.push(`${path} must be ${schema.type}`);
+    return;
+  }
+  if (schema.type === "string" && typeof value === "string") {
+    if (schema.minLength !== undefined && value.length < schema.minLength) {
+      errors.push(`${path} must have length at least ${schema.minLength}`);
+    }
+    if (schema.pattern && !new RegExp(schema.pattern, "u").test(value)) {
+      errors.push(`${path} must match ${schema.pattern}`);
+    }
+  }
+  if (schema.type === "array" && Array.isArray(value)) {
+    for (const item of value) {
+      validateSchemaNode(item, schema.items ?? {}, `${path}[]`, errors);
+    }
+    return;
+  }
+  if (schema.type !== "object" || !value || typeof value !== "object" || Array.isArray(value)) {
+    return;
+  }
+
+  for (const key of schema.required ?? []) {
+    if (!(key in value)) {
+      errors.push(`${path}.${key} is required`);
+    }
+  }
+
+  for (const [key, child] of Object.entries(schema.properties ?? {})) {
+    if (key in value) {
+      validateSchemaNode(value[key], child, `${path}.${key}`, errors);
+    }
+  }
+
+  if (schema.propertyNames) {
+    for (const key of Object.keys(value)) {
+      validateSchemaNode(key, schema.propertyNames, `${path} property name ${key}`, errors);
+    }
+  }
+
+  for (const [key, childValue] of Object.entries(value)) {
+    if (schema.properties?.[key]) {
+      continue;
+    }
+    const pattern = Object.entries(schema.patternProperties ?? {}).find(([source]) => new RegExp(source, "u").test(key));
+    if (pattern) {
+      validateSchemaNode(childValue, pattern[1], `${path}.${key}`, errors);
+    } else if (schema.additionalProperties === false) {
+      errors.push(`${path}.${key} is not allowed`);
+    } else if (schema.additionalProperties && typeof schema.additionalProperties === "object") {
+      validateSchemaNode(childValue, schema.additionalProperties, `${path}.${key}`, errors);
+    }
+  }
+}
+
+function matchesType(value, type) {
+  if (type === "array") {
+    return Array.isArray(value);
+  }
+  if (type === "object") {
+    return value !== null && typeof value === "object" && !Array.isArray(value);
+  }
+  return typeof value === type;
+}

@@ -5,8 +5,8 @@ import { createConfigForTemplate, normalizePath } from "./config.js";
 
 export const managedBlockId = "artifact-paths";
 
-export function defaultConfigJson(templateName = "standard", root = ".ai") {
-  return `${JSON.stringify(createConfigForTemplate(templateName, root), null, 2)}\n`;
+export function defaultConfigJson(templateName = "standard", root = ".ai", options = {}) {
+  return `${JSON.stringify(createConfigForTemplate(templateName, root, options), null, 2)}\n`;
 }
 
 export function agentManagedBlock(root = ".ai") {
@@ -91,7 +91,17 @@ function readPackagedSkillFile(relativePath) {
   return readFileSync(new URL(`../skills/${relativePath}`, import.meta.url), "utf8").replace(/\n$/u, "");
 }
 
-export function setupHandoffPrompt(root = ".ai") {
+export function setupHandoffPrompt(root = ".ai", options = {}) {
+  if (options.profile === "minimal") {
+    const languagePath = normalizePath(path.join(root, "LANGUAGE.md"));
+    const memoryPath = normalizePath(path.join(root, "memory", "README.md"));
+    return [
+      `Read ${normalizePath(path.join(root, "config.json"))}, AGENTS.md, ${languagePath}, and ${memoryPath}.`,
+      "Capture only stable repository guidance: operating rules, vocabulary,",
+      "architecture memory, and documentation routing through the Atlas config."
+    ].join("\n");
+  }
+
   const setupSkillPath = normalizePath(path.join(root, "skills", "atlas-setup", "SKILL.md"));
   return [
     `Read ${setupSkillPath} and follow it to finish the Atlas setup on`,
@@ -101,23 +111,28 @@ export function setupHandoffPrompt(root = ".ai") {
   ].join("\n");
 }
 
-export function initNextStepText(root = ".ai") {
-  const indentedPrompt = setupHandoffPrompt(root)
+export function initNextStepText(root = ".ai", options = {}) {
+  const indentedPrompt = setupHandoffPrompt(root, options)
     .split("\n")
     .map((line) => `  ${line}`)
     .join("\n");
   const normalizedRoot = normalizePath(root);
-  const scaffoldPaths = [normalizedRoot, ".claude", ".agents", ".cursor", "AGENTS.md", "CLAUDE.md"];
+  const scaffoldPaths = options.profile === "minimal"
+    ? [normalizedRoot, "AGENTS.md", "CLAUDE.md"]
+    : [normalizedRoot, ".claude", ".agents", ".cursor", "AGENTS.md", "CLAUDE.md"];
   if (normalizedRoot !== ".ai") {
     scaffoldPaths.push(".atlas");
   }
-  return [
+  const lines = [
     "Next step — paste this to your coding agent:",
     "",
     indentedPrompt,
     "",
-    "Claude Code: run /atlas-setup (or /atlas:atlas-setup with the Atlas plugin)",
     "Repair drift later: atlas doctor --fix",
     `Commit the scaffold when ready: git add ${scaffoldPaths.join(" ")}`
-  ].join("\n");
+  ];
+  if (options.profile !== "minimal") {
+    lines.splice(4, 0, "Claude Code: run /atlas-setup (or /atlas:atlas-setup with the Atlas plugin)");
+  }
+  return lines.join("\n");
 }

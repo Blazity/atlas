@@ -57,6 +57,7 @@ test("help documents the exit-code contract and the doctor/init flags", async ()
   assert.match(result.stdout, /Exit codes/);
   assert.match(result.stdout, /0 {2}clean/);
   assert.match(result.stdout, /--dry-run/);
+  assert.match(result.stdout, /--minimal/);
   assert.match(result.stdout, /--ci/);
   assert.match(result.stdout, /--here/);
   assert.match(result.stdout, /--json/);

@@ -53,6 +53,8 @@ One run scaffolds the workspace — config, vocabulary, memory, artifact directo
 
 In a terminal, `init` runs interactively: it asks where the workspace should live (default `.ai`), previews every file before writing, and can launch a detected agent CLI (`claude`, `codex`, `cursor-agent`) with the handoff prompt.
 
+Use `init --minimal` when a repository only needs the config, AGENTS.md/CLAUDE.md entrypoints, vocabulary, and memory. The config records disabled features; later, set a feature flag to `true` and run `atlas doctor --fix` to scaffold that feature.
+
 ## Safe to run on an existing repo
 
 These are behaviors you can verify in two minutes, not promises:
@@ -78,6 +80,8 @@ This repository runs on Atlas. Its own workspace is the demo:
 
 If your repo already keeps docs in conventional places (`docs/adrs`, `docs/specs`, …), Atlas maps them into the workspace through config-driven `pathAliases` instead of inventing a parallel documentation system — `doctor --fix` performs the moves, and the config keeps routing future writes.
 
+The published config schema lives at [`schema/config.schema.json`](schema/config.schema.json), and scaffolded configs include a `$schema` reference for editor completion. Runtime validation remains hand-rolled and dependency-free.
+
 ## `doctor` in CI
 
 ```yaml
@@ -95,6 +99,8 @@ The exit codes are a frozen contract:
 
 Advisories (setup pending, empty memory, oversized context) inform and never fail a build. `doctor --json` emits the findings as structured data for scripting. Pin the version rather than `@latest`: managed skill files are byte-compared, so upgrading the package and running `doctor --fix` belong in the same change.
 
+Per-repo suppression lives in `.ai/config.json` under `doctor.suppress`. Suppression can hide advisory or fixable finding codes, never manual conflicts; suppressed findings still render as one summary line and appear under `suppressed` in `doctor --json`.
+
 Context-size advisories watch the files agents actually load — `AGENTS.md`, `CLAUDE.md`, vocabulary, memory, decisions, managed skills — against heuristic character budgets informed by documented agent caps (for example, Codex reads at most 32 KiB of project docs by default). They are hints to compact, not model limits. When one fires, `atlas doctor --handoff context-size` prints a safe cleanup prompt for any agent, and the `atlas-compact` managed skill runs the full loop: measure with the CLI, propose a per-file plan, apply approved edits, re-run `doctor` for before/after proof.
 
 ## Updating
@@ -105,6 +111,7 @@ The workspace records how it was written, and `doctor` uses both records:
 
 - `config.json` carries `atlasVersion`, the package version that last wrote the workspace. A newer CLI reports a `atlas-version-behind` advisory until you run `doctor --fix`; an older CLI hits an `atlas-version-ahead` manual conflict instead of silently reverting newer managed files (`--force` is the explicit override).
 - `atlas.lock.json` records a content baseline for every managed skill file. A file that differs from the package but matches its baseline was never touched locally, so `--fix` updates it. A file that differs from both is a deliberate customization: `doctor` reports a `customized-skill` advisory and `--fix` leaves it alone. Keep the customization with `doctor --adopt-skills` (the advisory returns only when a later release changes that skill), or overwrite it with `doctor --fix --reset-skills`.
+- Config migrations are reported as `config-migration-available` and applied only by `doctor --fix`. Customized legacy defaults are left in place with a `config-migration-conflict` advisory that names the old default, new default, and current value.
 
 Workspaces scaffolded before the lockfile existed classify old skill content as customized once — run `doctor --fix --reset-skills` after upgrading if you never customized the managed skills.
 

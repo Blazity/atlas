@@ -293,6 +293,21 @@ test("an adopted skill reports again when the packaged copy changes after adopti
   });
 });
 
+test("doctor --adopt-skills refuses an invalid config instead of guessing paths", async () => {
+  await withTempRepo(async (directory) => {
+    await initWorkspace(directory);
+    await writeFile(path.join(directory, ".ai/config.json"), "not json\n", "utf8");
+    await commitAll(directory);
+    const lockBefore = await readFile(path.join(directory, ".ai/atlas.lock.json"), "utf8");
+
+    const result = await runCli(["doctor", "--adopt-skills"], { cwd: directory });
+
+    assert.equal(result.exitCode, 2);
+    assert.match(result.stderr, /config is missing or invalid/);
+    assert.equal(await readFile(path.join(directory, ".ai/atlas.lock.json"), "utf8"), lockBefore);
+  });
+});
+
 test("doctor --adopt-skills refuses a dirty worktree unless forced", async () => {
   await withTempRepo(async (directory) => {
     await initWorkspace(directory);

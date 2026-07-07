@@ -125,6 +125,13 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
         }
       }
       const adopted = await adoptSkills(cwd);
+      if (adopted === null) {
+        return {
+          exitCode: 2,
+          stdout: "",
+          stderr: "Cannot adopt skills: the Atlas config is missing or invalid. Run atlas doctor and resolve manual conflicts first.\n"
+        };
+      }
       const body = adopted.length === 0
         ? "No customized managed skill files found — baselines refreshed.\n"
         : `Adopted baselines for ${adopted.length} customized managed skill file(s):\n${adopted.map((file) => `- ${file}`).join("\n")}\n`;

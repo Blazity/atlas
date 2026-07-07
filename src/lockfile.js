@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { normalizePath, resolveArtifactPath } from "./config.js";
 import { readTextIfExists, repoPath } from "./repo.js";
-import { managedSkillFiles, packagedSkillContent } from "./templates.js";
+import { managedSkillFiles, packagedSkillFileContent } from "./templates.js";
 
 const lockfileName = "atlas.lock.json";
 
@@ -62,7 +62,7 @@ export async function computeLockfileFiles(repoRoot, config, previous) {
     if (current === null) {
       continue;
     }
-    if (current === `${packagedSkillContent(skillName, fileName)}\n`) {
+    if (current === packagedSkillFileContent(skillName, fileName)) {
       const hash = sha256(current);
       files[relativePath] = { sha256: hash, packaged: hash };
     } else {

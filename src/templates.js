@@ -82,8 +82,9 @@ export function defaultCompactSkillMd() {
   return readPackagedSkillFile("atlas-compact/SKILL.md");
 }
 
-export function packagedSkillContent(skillName, fileName) {
-  return readPackagedSkillFile(`${skillName}/${fileName}`);
+// Packaged managed-skill file content as written to disk (trailing newline).
+export function packagedSkillFileContent(skillName, fileName) {
+  return `${readPackagedSkillFile(`${skillName}/${fileName}`)}\n`;
 }
 
 function readPackagedSkillFile(relativePath) {

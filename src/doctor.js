@@ -35,7 +35,7 @@ import {
   defaultMemoryReadme,
   managedBlockId,
   managedSkillFiles,
-  packagedSkillContent
+  packagedSkillFileContent
 } from "./templates.js";
 
 const defaultRoot = ".ai";
@@ -185,6 +185,11 @@ export async function finalizeWorkspaceMetadata(repoRoot) {
 // deliberate customizations stop reporting as customized-skill advisories.
 export async function adoptSkills(repoRoot) {
   const loaded = await loadConfig(repoRoot);
+  // An unreadable config falls back to template defaults, which would compute
+  // baselines against the wrong root — refuse instead of guessing.
+  if (!loaded.exists || loaded.errors.length > 0) {
+    return null;
+  }
   const adopted = [];
   const files = {};
 
@@ -194,7 +199,7 @@ export async function adoptSkills(repoRoot) {
     if (current === null) {
       continue;
     }
-    const packaged = `${packagedSkillContent(skillName, fileName)}\n`;
+    const packaged = packagedSkillFileContent(skillName, fileName);
     files[relativePath] = { sha256: sha256(current), packaged: sha256(packaged) };
     if (current !== packaged) {
       adopted.push(relativePath);

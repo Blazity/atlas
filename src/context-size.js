@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { normalizePath, resolveArtifactPath } from "./config.js";
 import { repoPath } from "./repo.js";
-import { managedSkillFiles } from "./templates.js";
+import { managedSkillFilesForConfig } from "./templates.js";
 
 export const contextSizeThresholds = {
   rootInstruction: { warn: 8000, warnLines: 200, overflow: 32768 },
@@ -166,7 +166,7 @@ async function collectContextFileCandidates(repoRoot, config, io) {
   }, io));
 
   const skillsRoot = resolveArtifactPath(config, "skills");
-  for (const [skillName, fileName] of managedSkillFiles) {
+  for (const [skillName, fileName] of managedSkillFilesForConfig(config)) {
     candidates.push({
       relativePath: normalizePath(path.join(skillsRoot, skillName, fileName)),
       category: "managed-skill",

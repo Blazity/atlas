@@ -712,7 +712,7 @@ test("doctor --json carries context-size details for agent consumption", async (
   });
 });
 
-test("init scaffolds every file in the managed-skill manifest", async () => {
+test("init scaffolds every unconditional managed-skill file", async () => {
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });
 

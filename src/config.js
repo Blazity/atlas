@@ -139,6 +139,13 @@ export function validateConfig(config) {
         errors.push(`paths.${key} must not escape artifactRoot`);
       }
     }
+    if (config.paths.graph !== undefined) {
+      if (typeof config.paths.graph !== "string" || config.paths.graph.trim() === "") {
+        errors.push("paths.graph must be a non-empty string");
+      } else if (!path.isAbsolute(config.paths.graph) && pathEscapesRoot(config.paths.graph)) {
+        errors.push("paths.graph must not escape artifactRoot");
+      }
+    }
   }
 
   if (!config.pathAliases || typeof config.pathAliases !== "object" || Array.isArray(config.pathAliases)) {
@@ -157,6 +164,14 @@ export function validateConfig(config) {
       if (typeof target === "string" && !path.isAbsolute(target) && pathEscapesRoot(target)) {
         errors.push(`pathAliases.${alias} must not escape artifactRoot`);
       }
+    }
+  }
+
+  if (config.features !== undefined) {
+    if (!config.features || typeof config.features !== "object" || Array.isArray(config.features)) {
+      errors.push("features must be an object");
+    } else if (config.features.graph !== undefined) {
+      addGraphFeatureErrors(config.features.graph, errors);
     }
   }
 
@@ -219,4 +234,37 @@ export function configPath(repoRoot, root = ".ai") {
 function pathEscapesRoot(value) {
   const normalized = path.posix.normalize(normalizePath(value));
   return normalized === ".." || normalized.startsWith("../");
+}
+
+function addGraphFeatureErrors(graph, errors) {
+  if (!graph || typeof graph !== "object" || Array.isArray(graph)) {
+    errors.push("features.graph must be an object");
+    return;
+  }
+
+  if (graph.enabled !== undefined && typeof graph.enabled !== "boolean") {
+    errors.push("features.graph.enabled must be a boolean");
+  }
+
+  if (graph.staleCommitThreshold !== undefined && (!Number.isInteger(graph.staleCommitThreshold) || graph.staleCommitThreshold < 0)) {
+    errors.push("features.graph.staleCommitThreshold must be a non-negative integer");
+  }
+
+  if (graph.enabled === true && graph.generator === undefined) {
+    errors.push("features.graph.generator is required when features.graph.enabled is true");
+    return;
+  }
+
+  if (graph.generator !== undefined) {
+    if (!graph.generator || typeof graph.generator !== "object" || Array.isArray(graph.generator)) {
+      errors.push("features.graph.generator must be an object");
+      return;
+    }
+    if (typeof graph.generator.name !== "string" || graph.generator.name.trim() === "") {
+      errors.push("features.graph.generator.name must be a non-empty string");
+    }
+    if (typeof graph.generator.version !== "string" || graph.generator.version.trim() === "") {
+      errors.push("features.graph.generator.version must be a non-empty string");
+    }
+  }
 }

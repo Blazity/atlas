@@ -19,6 +19,8 @@ test("creates the default config with root-relative paths and aliases", () => {
   assert.equal(config.template, "standard");
   assert.equal(config.artifactRoot, ".ai");
   assert.equal(config.paths.plans, "plans");
+  assert.equal(config.paths.graph, undefined);
+  assert.equal(config.features, undefined);
   assert.equal(config.paths.adrs, "decisions/adrs");
   assert.equal(config.pathAliases["docs/plans"], "plans");
   assert.equal(config.pathAliases["docs/superpowers/plans"], undefined);
@@ -79,6 +81,39 @@ test("validates agentSurfaces as an optional subset of known surfaces", () => {
   assert.match(validateConfig({ ...legacy, agentSurfaces: "claude" }).errors.join("\n"), /agentSurfaces/);
 });
 
+test("validates graph as an optional feature with an optional artifact path", () => {
+  const config = createDefaultConfig();
+
+  assert.deepEqual(validateConfig({
+    ...config,
+    paths: { ...config.paths, graph: "graph" },
+    features: {
+      graph: {
+        enabled: true,
+        staleCommitThreshold: 10,
+        generator: { name: "graphify", version: "1.2.3" }
+      }
+    }
+  }).errors, []);
+
+  const invalid = validateConfig({
+    ...config,
+    paths: { ...config.paths, graph: "../graph" },
+    features: {
+      graph: {
+        enabled: true,
+        staleCommitThreshold: -1,
+        generator: { name: "", version: 123 }
+      }
+    }
+  });
+
+  assert.match(invalid.errors.join("\n"), /paths\.graph/);
+  assert.match(invalid.errors.join("\n"), /features\.graph\.staleCommitThreshold/);
+  assert.match(invalid.errors.join("\n"), /features\.graph\.generator\.name/);
+  assert.match(invalid.errors.join("\n"), /features\.graph\.generator\.version/);
+});
+
 test("configPath joins the workspace root with config.json", () => {
   assert.equal(configPath("/repo"), path.join("/repo", ".ai", "config.json"));
   assert.equal(configPath("/repo", ".workspace"), path.join("/repo", ".workspace", "config.json"));
@@ -105,6 +140,7 @@ test("resolves artifact paths through artifactRoot unless absolute", () => {
 
   assert.equal(resolveArtifactPath(config, "plans"), ".ai/plans");
   assert.equal(resolveArtifactPath(config, "adrs"), ".ai/decisions/adrs");
+  assert.equal(resolveArtifactPath(config, "graph"), ".ai/graph");
   assert.equal(resolveArtifactPath({ ...config, artifactRoot: "/tmp/.ai" }, "plans"), "/tmp/.ai/plans");
 });
 

@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { createConfigForTemplate, normalizePath } from "./config.js";
+import { createConfigForTemplate, normalizePath, resolveArtifactPath } from "./config.js";
+import { graphFeatureConfig } from "./graph.js";
 
 export const managedBlockId = "artifact-paths";
 
@@ -9,22 +10,35 @@ export function defaultConfigJson(templateName = "standard", root = ".ai") {
   return `${JSON.stringify(createConfigForTemplate(templateName, root), null, 2)}\n`;
 }
 
-export function agentManagedBlock(root = ".ai") {
+export function agentManagedBlock(root = ".ai", config = null) {
   const configReference = `\`${normalizePath(path.join(root, "config.json"))}\``;
-  return [
+  const lines = [
     "## Atlas Artifact Paths",
     "",
     `${configReference} is the source of truth for AI artifact locations in this repository.`,
     "Before writing plans, research, decisions, ADRs, results, memory, vocabulary, or skill outputs, resolve the destination through `artifactRoot`, `paths`, and `pathAliases`.",
     `If an imported skill, template, or instruction mentions a different path, map it through ${configReference} before reading or writing files.`,
-    `Do not create new documentation roots unless ${configReference} explicitly allows them.`,
+    `Do not create new documentation roots unless ${configReference} explicitly allows them.`
+  ];
+
+  const graph = config ? graphFeatureConfig(config) : { enabled: false };
+  if (graph.enabled) {
+    lines.push(
+      "",
+      `Repository graph artifacts live at \`${resolveArtifactPath(config, "graph")}\`; consult them on demand for repository structure, and rebuild them through the \`atlas-graph\` skill instead of editing generated files by hand.`
+    );
+  }
+
+  lines.push(
     "",
     "## Atlas Documentation Rules",
     "",
     "Durable documentation records needs, decisions, and reasons — never individuals or internal process.",
     'Write "memory was needed to persist context across runs", not "<name> wanted memory".',
     "Keep personal names, private schedules, internal-only references, and absolute local paths out of workspace artifacts."
-  ].join("\n");
+  );
+
+  return lines.join("\n");
 }
 
 export function defaultClaudeMd() {
@@ -66,6 +80,18 @@ export const managedSkillFiles = [
   ["atlas-compact", "SKILL.md"]
 ];
 
+export const managedSkillManifest = [
+  ...managedSkillFiles,
+  ["atlas-graph", "SKILL.md", { feature: "graph" }]
+];
+
+export function managedSkillFilesForConfig(config) {
+  const graph = graphFeatureConfig(config);
+  return managedSkillManifest
+    .filter(([, , options]) => !options?.feature || (options.feature === "graph" && graph.enabled))
+    .map(([skillName, fileName]) => [skillName, fileName]);
+}
+
 export function defaultSetupSkillMd() {
   return readPackagedSkillFile("atlas-setup/SKILL.md");
 }
@@ -80,6 +106,10 @@ export function defaultReviewSkillMd() {
 
 export function defaultCompactSkillMd() {
   return readPackagedSkillFile("atlas-compact/SKILL.md");
+}
+
+export function defaultGraphSkillMd() {
+  return readPackagedSkillFile("atlas-graph/SKILL.md");
 }
 
 // Packaged managed-skill file content as written to disk (trailing newline).

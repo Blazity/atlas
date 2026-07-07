@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { normalizePath, resolveArtifactPath } from "./config.js";
 import { readTextIfExists, repoPath } from "./repo.js";
-import { managedSkillFiles, packagedSkillFileContent } from "./templates.js";
+import { managedSkillFilesForConfig, packagedSkillFileContent } from "./templates.js";
 
 const lockfileName = "atlas.lock.json";
 
@@ -56,7 +56,7 @@ export function lockfileContent(atlasVersion, files) {
 // so adopted or still-customized files keep their baseline across rewrites.
 export async function computeLockfileFiles(repoRoot, config, previous) {
   const files = {};
-  for (const [skillName, fileName] of managedSkillFiles) {
+  for (const [skillName, fileName] of managedSkillFilesForConfig(config)) {
     const relativePath = managedFileRelativePath(config, skillName, fileName);
     const current = await readTextIfExists(repoPath(repoRoot, relativePath));
     if (current === null) {

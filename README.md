@@ -49,7 +49,7 @@ A short demo of `atlas init`, the handoff prompt, and `atlas doctor`.
 npx --yes @blazity-atlas/core@latest init
 ```
 
-One run scaffolds the workspace — config, vocabulary, memory, artifact directories, two managed skills, the AGENTS.md and CLAUDE.md entrypoints, and the agent symlinks — then prints a ready-to-paste handoff prompt. Your own coding agent takes it from there: it inspects the repository and fills the workspace with project-specific facts.
+One run scaffolds the workspace — config, vocabulary, memory, artifact directories, managed skills, the AGENTS.md and CLAUDE.md entrypoints, and the agent symlinks — then prints a ready-to-paste handoff prompt. Your own coding agent takes it from there: it inspects the repository and fills the workspace with project-specific facts.
 
 In a terminal, `init` runs interactively: it asks where the workspace should live (default `.ai`), previews every file before writing, and can launch a detected agent CLI (`claude`, `codex`, `cursor-agent`) with the handoff prompt.
 
@@ -77,6 +77,43 @@ This repository runs on Atlas. Its own workspace is the demo:
 - [`.ai/results/`](.ai/results) — review verdicts from the `atlas-review` process gate.
 
 If your repo already keeps docs in conventional places (`docs/adrs`, `docs/specs`, …), Atlas maps them into the workspace through config-driven `pathAliases` instead of inventing a parallel documentation system — `doctor --fix` performs the moves, and the config keeps routing future writes.
+
+## Optional repository graph
+
+Atlas can track a generated repository knowledge graph, but the feature is opt-in: scaffolded configs do not include `paths.graph` or `features.graph`, and repos that leave it disabled get no graph findings or graph skill scaffold.
+
+To enable it, add a graph feature block and optionally pin the graph path:
+
+```json
+{
+  "paths": {
+    "graph": "graph"
+  },
+  "features": {
+    "graph": {
+      "enabled": true,
+      "staleCommitThreshold": 50,
+      "generator": {
+        "name": "graphify",
+        "version": "1.2.3"
+      }
+    }
+  }
+}
+```
+
+When `paths.graph` is absent, Atlas resolves the default `graph` path under `artifactRoot`. Graph generators write their artifacts there plus `graph.meta.json`:
+
+```json
+{
+  "generator": { "name": "graphify", "version": "1.2.3" },
+  "buildSha": "<git sha>",
+  "scope": "code",
+  "provenance": "extracted"
+}
+```
+
+`atlas doctor` never runs a generator. When graph support is enabled, it reports graph metadata problems as advisories only: missing or invalid sidecars, stale `buildSha` values, and generator-version drift from the pinned config. The optional `atlas-graph` managed skill detects a user-installed graphify CLI, runs it in code-only/offline mode, writes the sidecar, and shows the diff for review.
 
 ## `doctor` in CI
 
@@ -110,7 +147,7 @@ Workspaces scaffolded before the lockfile existed classify old skill content as 
 
 ## Reviews that leave a verdict
 
-The second managed skill, `atlas-review`, walks AI-assisted work through five modes — Intake, Plan, Review, Gate, Postmortem — and writes its verdict (pass / conditional pass / fail, with evidence, risks, and an owner) into `.ai/results/`, where the next agent run and the next human can find it. A review that leaves no artifact doesn't count as a review.
+The `atlas-review` managed skill walks AI-assisted work through five modes — Intake, Plan, Review, Gate, Postmortem — and writes its verdict (pass / conditional pass / fail, with evidence, risks, and an owner) into `.ai/results/`, where the next agent run and the next human can find it. A review that leaves no artifact doesn't count as a review.
 
 Claude Code users run `/atlas-review`. Any other agent gets the same behavior from one instruction: *"read `.ai/skills/atlas-review/SKILL.md`"*.
 

@@ -78,6 +78,46 @@ This repository runs on Atlas. Its own workspace is the demo:
 
 If your repo already keeps docs in conventional places (`docs/adrs`, `docs/specs`, …), Atlas maps them into the workspace through config-driven `pathAliases` instead of inventing a parallel documentation system — `doctor --fix` performs the moves, and the config keeps routing future writes.
 
+## Workspace status
+
+`atlas status` is the read-only dashboard for the same workspace. It recomputes doctor health without applying fixes, inventories configured artifacts, reports memory freshness, compresses context-size risk to over-threshold files, and shows the newest review verdict. It always exits `0`; use `doctor` when you need a gate. `status --json` emits stable top-level keys: `initialized`, `identity`, `health`, `artifacts`, `memoryFreshness`, `contextBudgets`, and `lastReviewVerdict`. When `initialized` is `false`, the payload also includes `message` and `initCommand`. `health.classification` is one of `clean`, `fixable`, `manual`, or `not-initialized`.
+
+Two weeks in, this repository's own workspace reports:
+
+```text
+Atlas status
+
+Identity:
+  Template: library
+  Workspace root: .ai
+  Atlas version: 0.5.0 (CLI 0.5.0, current)
+  Setup state: configured
+
+Health:
+  Classification: clean
+  Findings: 0 manual, 0 fixable, 0 advisory
+
+Artifacts:
+  Plans: 4 files (2026-06-11 to 2026-07-07)
+  Research: 1 file (2026-06-11)
+  Decisions/ADRs: 4 files (2026-06-11 to 2026-07-06)
+  Results: 1 file (2026-07-03)
+  Memory: 4 files (2026-06-11 to 2026-06-12)
+  Language: 1 file (2026-06-11)
+
+Memory Freshness:
+  Files: 4 files
+  Date range: 2026-06-11 to 2026-06-12
+  Last memory commit: 2026-06-12
+  Entry metadata: counts-only
+
+Context Budgets:
+  No files over threshold.
+
+Last Review Verdict:
+  conditional pass - .ai/results/2026-07-02-gate-atlas-core-0-4-0.md (2026-07-03)
+```
+
 ## `doctor` in CI
 
 ```yaml

@@ -76,8 +76,14 @@ test("config validation accepts a missing stamp and rejects a malformed one", ()
 
   assert.equal(validateConfig(base).valid, true);
   assert.equal(validateConfig({ ...base, atlasVersion: "0.4.0" }).valid, true);
+  assert.equal(validateConfig({
+    ...base,
+    memory: { shared: { source: "file:///tmp/org-memory", ref: "main", pin: "a".repeat(40) } }
+  }).valid, true);
   assert.equal(validateConfig({ ...base, atlasVersion: "latest" }).valid, false);
   assert.equal(validateConfig({ ...base, atlasVersion: 4 }).valid, false);
+  assert.equal(validateConfig({ ...base, memory: { shared: { source: "", ref: "main", pin: "abc123" } } }).valid, false);
+  assert.equal(validateConfig({ ...base, memory: { shared: { source: "file:///tmp/org-memory", ref: "main" } } }).valid, false);
 });
 
 test("init stamps the workspace with the running package version", async () => {
@@ -157,6 +163,7 @@ test("init writes a lockfile with baselines for every managed skill file", async
     assert.equal(lock.atlasVersion, packageVersion);
     assert.deepEqual(Object.keys(lock.files).sort(), [
       ".ai/skills/atlas-compact/SKILL.md",
+      ".ai/skills/atlas-memory/SKILL.md",
       ".ai/skills/atlas-review/SKILL.md",
       ".ai/skills/atlas-setup/SKILL.md",
       ".ai/skills/atlas-setup/customization.md"
@@ -178,7 +185,7 @@ test("a missing lockfile on an initialized workspace is fixable", async () => {
     const fix = await runCli(["doctor", "--fix"], { cwd: directory });
     assert.equal(fix.exitCode, 0);
     const lock = await readLock(directory);
-    assert.equal(Object.keys(lock.files).length, 4);
+    assert.equal(Object.keys(lock.files).length, 5);
   });
 });
 

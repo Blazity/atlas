@@ -740,7 +740,7 @@ test("doctor --fix --reset-skills restores the managed compact skill", async () 
   });
 });
 
-test("fresh init survives commit and clone with doctor exit 0", async () => {
+test("fresh init survives commit and clone with only fixable scratch-memory drift", async () => {
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });
     await commitAll(directory, "initialize atlas");
@@ -751,8 +751,12 @@ test("fresh init survives commit and clone with doctor exit 0", async () => {
       await execFileAsync("git", ["clone", directory, clonePath]);
 
       const doctor = await runCli(["doctor"], { cwd: clonePath });
+      const fix = await runCli(["doctor", "--fix", "--force"], { cwd: clonePath });
 
-      assert.equal(doctor.exitCode, 0);
+      assert.equal(doctor.exitCode, 1);
+      assert.match(doctor.stdout, /\[missing-memory-local\] \.ai\/memory\/local is missing/);
+      assert.equal(fix.exitCode, 0);
+      await stat(path.join(clonePath, ".ai/memory/local"));
       await stat(path.join(clonePath, ".ai/plans/.gitkeep"));
       await stat(path.join(clonePath, ".ai/research/.gitkeep"));
       await stat(path.join(clonePath, ".ai/results/.gitkeep"));

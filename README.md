@@ -33,6 +33,7 @@ Atlas (by [Blazity](https://blazity.com)) gives the repository one place for all
 - 🧩 **Plays well with skills** — third-party and custom skills route their documentation output through `.ai/config.json` instead of inventing new folders
 - 📦 **Builds on what you have** — config-driven path aliases adopt your existing docs folders instead of replacing them
 - 🩺 **Machine-checked** — `atlas doctor` verifies the structure in CI with frozen exit codes; `--fix` repairs drift deterministically
+- 📊 **One-screen status** — `atlas status` shows workspace health, artifact freshness, and context budgets; `--json` for scripting
 - 🔒 **Nothing leaves your repo** — no telemetry, no network calls, one dependency, plain files only
 
 ## Feature showcase

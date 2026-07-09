@@ -227,6 +227,23 @@ test("cancelling the git-init prompt in a non-repo exits 130 and creates no repo
   });
 });
 
+test("a failing git init exits 2 and creates no workspace", async () => {
+  await withTempDir(async (dir) => {
+    const io = makeIo({
+      text: async () => ".ai",
+      confirm: async () => true,
+      gitInit: async () => {
+        throw new Error("git: command not found");
+      }
+    });
+
+    const exitCode = await runInteractiveInit({ cwd: dir, color: false, io });
+
+    assert.equal(exitCode, 2);
+    await assert.rejects(stat(path.join(dir, ".ai")), /ENOENT/);
+  });
+});
+
 test("accepting the git-init prompt initializes the repo and scaffolds the workspace", async () => {
   await withTempDir(async (dir) => {
     const io = makeIo({

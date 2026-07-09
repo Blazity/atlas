@@ -70,7 +70,12 @@ export async function runInteractiveInit({ cwd, templateName = "standard", color
       cancel("Nothing written. Run git init first, then atlas init.");
       return 2;
     }
-    await ui.gitInit(cwd);
+    try {
+      await ui.gitInit(cwd);
+    } catch (error) {
+      cancel(`Could not initialize a git repository: ${error?.message ?? error}. Nothing written.`);
+      return 2;
+    }
     log.success("Initialized empty git repository.");
   }
 

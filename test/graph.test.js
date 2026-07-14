@@ -110,10 +110,13 @@ test("repos without the graph feature get no graph findings or graph scaffold", 
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });
 
+    const config = JSON.parse(await readFile(path.join(directory, ".ai/config.json"), "utf8"));
     const doctor = await runCli(["doctor", "--json"], { cwd: directory });
     const payload = JSON.parse(doctor.stdout);
 
     assert.equal(doctor.exitCode, 0);
+    assert.equal(Object.hasOwn(config.paths, "graph"), false);
+    assert.equal(Object.hasOwn(config.features, "graph"), false);
     assert(payload.findings.every((finding) => !finding.code.startsWith("graph-")));
     await assert.rejects(stat(path.join(directory, ".ai/skills/atlas-graph/SKILL.md")), /ENOENT/);
     await assert.rejects(stat(path.join(directory, ".ai/graph")), /ENOENT/);
@@ -131,6 +134,23 @@ test("doctor scaffolds atlas-graph only when the graph feature is enabled", asyn
     assert.match(skill, /name: atlas-graph/);
     assert.match(skill, /graphify/);
     await assert.rejects(stat(path.join(directory, ".ai/graph")), /ENOENT/);
+  });
+});
+
+test("graph skill drift is included in the managed-skill security audit", async () => {
+  await withTempRepo(async (directory) => {
+    await writeConfig(directory, graphConfig());
+    await runCli(["doctor", "--fix", "--force"], { cwd: directory });
+    const skillPath = path.join(directory, ".ai/skills/atlas-graph/SKILL.md");
+    const skill = await readFile(skillPath, "utf8");
+    await writeFile(skillPath, `${skill}\nLocal graph workflow note.\n`);
+
+    const result = await runCli(["doctor", "--json"], { cwd: directory });
+    const findings = JSON.parse(result.stdout).findings;
+
+    assert.equal(result.exitCode, 0);
+    assert(findings.some((finding) => finding.code === "customized-skill" && finding.file === ".ai/skills/atlas-graph/SKILL.md"));
+    assert(findings.some((finding) => finding.code === "security-skill-audit" && finding.file === ".ai/skills/atlas-graph/SKILL.md"));
   });
 });
 
@@ -223,6 +243,18 @@ test("doctor reports fresh, stale, unknown-sha, and generator-drift graph states
     assert.equal(stale.exitCode, 0);
     assert.equal(staleFinding.severity, "advisory");
     assert(staleFinding.details.some((detail) => /3 commits behind HEAD/.test(detail)));
+
+    const configPath = path.join(directory, ".ai/config.json");
+    const config = JSON.parse(await readFile(configPath, "utf8"));
+    config.doctor.suppress = ["graph-stale"];
+    await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
+    const suppressed = await runCli(["doctor", "--json"], { cwd: directory });
+    const suppressedPayload = JSON.parse(suppressed.stdout);
+    assert.equal(suppressed.exitCode, 0);
+    assert(suppressedPayload.findings.every((finding) => finding.code !== "graph-stale"));
+    assert(suppressedPayload.suppressed.some((finding) => finding.code === "graph-stale"));
+    config.doctor.suppress = [];
+    await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
     await writeGraph(directory, meta("0000000000000000000000000000000000000000"));
     const unknown = await runCli(["doctor", "--json"], { cwd: directory });

@@ -135,10 +135,11 @@ export async function collectDoctorFindings(repoRoot, options = {}) {
   }
 
   const hasManagedSkillFiles = managedSkillFilesForConfig(config).length > 0;
-  const lockfile = hasManagedSkillFiles
+  const needsLockfile = hasManagedSkillFiles || Boolean(config.memory?.shared);
+  const lockfile = needsLockfile
     ? await readLockfile(repoRoot, root)
-    : { exists: false, files: {}, error: null };
-  if (hasManagedSkillFiles) {
+    : { exists: false, files: {}, memory: {}, error: null };
+  if (needsLockfile) {
     if (lockfile.error) {
       findings.push(manualFinding("invalid-lockfile", `${lockfileRelativePath(root)} is not valid JSON: ${lockfile.error}`));
     } else if (loaded.exists && !lockfile.exists) {
@@ -159,14 +160,15 @@ export async function collectDoctorFindings(repoRoot, options = {}) {
   // Legacy moves must precede the managed-skill findings: applyFixes runs in
   // array order, so a legacy file is relocated before any managed write lands
   // on the new path (a write-first order would trip the move overwrite guard).
-  let managedSkillDriftFindings = [];
   if (isFeatureEnabled(config, "managedSkills")) {
     await addLegacySkillMigrationFindings(repoRoot, config, findings);
-    const beforeManagedSkillFindings = findings.length;
+  }
+  const beforeManagedSkillFindings = findings.length;
+  if (isFeatureEnabled(config, "managedSkills")) {
     await addMaintenanceSkillFindings(repoRoot, config, findings, { lockfile, resetSkills: Boolean(options.resetSkills) });
-    managedSkillDriftFindings = findings.slice(beforeManagedSkillFindings);
   }
   await addGraphSkillFindings(repoRoot, config, findings, { lockfile, resetSkills: Boolean(options.resetSkills) });
+  const managedSkillDriftFindings = findings.slice(beforeManagedSkillFindings);
   await addManagedFileFindings(repoRoot, root, config, findings);
   if (isFeatureEnabled(config, "agentSymlinks")) {
     await addSkillLinkFindings(repoRoot, config, findings);
@@ -205,7 +207,7 @@ export async function finalizeWorkspaceMetadata(repoRoot) {
     await writeText(configPath(repoRoot, loaded.root), `${JSON.stringify(next, null, 2)}\n`);
   }
 
-  if (managedSkillFilesForConfig(loaded.config).length === 0) {
+  if (managedSkillFilesForConfig(loaded.config).length === 0 && !loaded.config.memory?.shared) {
     return;
   }
 

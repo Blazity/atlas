@@ -21,7 +21,7 @@ export const configValidationFixtures = {
     { ...createConfigForTemplate("standard"), doctor: { silenced: ["setup-pending"] } },
     { ...createConfigForTemplate("standard"), features: { plans: "yes" } },
     { ...graphConfigFixture(), paths: { ...graphConfigFixture().paths, graph: "graph/../../outside" } },
-    { ...graphConfigFixture(), features: { ...defaultFeatures, graph: { enabled: true, staleCommitThreshold: -1, generator: { name: "", version: 1 } } } },
+    { ...graphConfigFixture(), features: { ...defaultFeatures, graph: { enabled: true, staleCommitThreshold: -1, generator: { name: "   ", version: "1.2.3" } } } },
     { ...createConfigForTemplate("standard"), agentSurfaces: ["vscode"] },
     { ...createConfigForTemplate("standard"), pathAliases: [] }
   ]

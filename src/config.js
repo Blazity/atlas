@@ -434,8 +434,8 @@ function graphFeatureJsonSchema() {
         type: "object",
         required: ["name", "version"],
         properties: {
-          name: { type: "string", minLength: 1 },
-          version: { type: "string", minLength: 1 }
+          name: { type: "string", minLength: 1, pattern: "\\S" },
+          version: { type: "string", minLength: 1, pattern: "\\S" }
         }
       }
     },

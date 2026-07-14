@@ -999,6 +999,8 @@ test("init --minimal scaffolds only the minimal feature set", async () => {
     assert.equal(config.features.plans, false);
     assert.equal(config.features.managedSkills, false);
     assert.equal(config.features.agentSymlinks, false);
+    assert.equal(Object.hasOwn(config.paths, "graph"), false);
+    assert.equal(Object.hasOwn(config.features, "graph"), false);
     await stat(path.join(directory, ".ai/config.json"));
     await stat(path.join(directory, "AGENTS.md"));
     await stat(path.join(directory, "CLAUDE.md"));
@@ -1011,7 +1013,30 @@ test("init --minimal scaffolds only the minimal feature set", async () => {
     await assert.rejects(lstat(path.join(directory, ".claude/skills")), /ENOENT/);
     assert.equal(doctor.exitCode, 0);
     assert.doesNotMatch(doctor.stdout, /missing-directory|missing-setup-skill|missing-skill-link/);
+    assert.doesNotMatch(doctor.stdout, /\[graph-/);
     assert.match(doctor.stdout, /\[feature-available\]/);
+  });
+});
+
+test("enabling shared memory keeps the lockfile flow active in a minimal workspace", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init", "--minimal"], { cwd: directory });
+    const configPath = path.join(directory, ".ai/config.json");
+    const config = JSON.parse(await readFile(configPath, "utf8"));
+    config.memory = {
+      shared: {
+        source: "https://example.com/org-memory.git",
+        ref: "main",
+        pin: "a".repeat(40)
+      }
+    };
+    await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
+
+    const fix = await runCli(["doctor", "--fix", "--force"], { cwd: directory });
+    const lockfile = JSON.parse(await readFile(path.join(directory, ".ai/atlas.lock.json"), "utf8"));
+
+    assert.equal(fix.exitCode, 0);
+    assert.deepEqual(lockfile.files, {});
   });
 });
 

@@ -184,7 +184,7 @@ test("runtime and schema accept the graph object beside boolean features", () =>
       graph: {
         ...valid.features.graph,
         staleCommitThreshold: -1,
-        generator: { name: "", version: 123 }
+        generator: { name: "   ", version: "1.2.3" }
       }
     }
   };
@@ -193,7 +193,8 @@ test("runtime and schema accept the graph object beside boolean features", () =>
   assert.deepEqual(validateWithSchema(valid, configJsonSchema()), []);
   assert.match(validateConfig(invalid).errors.join("\n"), /paths\.graph/);
   assert.match(validateConfig(invalid).errors.join("\n"), /features\.graph\.staleCommitThreshold/);
-  assert.notEqual(validateWithSchema(invalid, configJsonSchema()).length, 0);
+  assert.match(validateConfig(invalid).errors.join("\n"), /features\.graph\.generator\.name/);
+  assert.match(validateWithSchema(invalid, configJsonSchema()).join("\n"), /generator\.name/);
 });
 
 test("registers suppression codes from memory and security checks", () => {

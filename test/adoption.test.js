@@ -61,6 +61,7 @@ test("help documents the exit-code contract and the doctor/init flags", async ()
   assert.match(result.stdout, /--ci/);
   assert.match(result.stdout, /--here/);
   assert.match(result.stdout, /--json/);
+  assert.match(result.stdout, /status/);
   assert.match(result.stdout, /--version/);
   assert.match(result.stdout, /atlas memory pull/);
   assert.match(result.stdout, /atlas memory propose/);

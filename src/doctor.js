@@ -74,20 +74,24 @@ export async function loadConfig(repoRoot, options = {}) {
       config: createConfigForTemplate(options.templateName ?? "standard", root, { profile: options.profile }),
       exists: false,
       errors: [],
-      root
+      root,
+      fallback: true,
+      fallbackReason: "missing"
     };
   }
 
   try {
     const config = JSON.parse(await readFile(filePath, "utf8"));
     const validation = validateConfig(config);
-    return { config, exists: true, errors: validation.errors, root };
+    return { config, exists: true, errors: validation.errors, root, fallback: false, fallbackReason: null };
   } catch (error) {
     return {
       config: createConfigForTemplate(options.templateName ?? "standard", root, { profile: options.profile }),
       exists: true,
       errors: [`config is not valid JSON: ${error.message}`],
-      root
+      root,
+      fallback: true,
+      fallbackReason: "invalid-json"
     };
   }
 }

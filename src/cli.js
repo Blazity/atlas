@@ -13,6 +13,7 @@ import { buildContextSizeHandoffPrompt } from "./context-size.js";
 import { proposeOrgMemory, pullSharedMemory } from "./memory.js";
 import { exitCodeForFindings, formatFindings } from "./output.js";
 import { describeDirtyStatus, fileExists, gitStatus, isGitRepo } from "./repo.js";
+import { runStatus } from "./status.js";
 import { applySuppression } from "./suppression.js";
 import { runUpdateCheck, updateAdvisoryFinding } from "./update.js";
 import { packageVersion } from "./version.js";
@@ -72,6 +73,14 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
       return usageError(validation);
     }
     return runUpdateCheck({ cwd, fetchImpl: options.fetchImpl });
+  }
+
+  if (parsed.command === "status") {
+    const validation = validateFlags(parsed.flags, ["json"]);
+    if (validation) {
+      return usageError(validation);
+    }
+    return runStatus({ cwd, json: parsed.flags.has("json"), color: Boolean(options.color) });
   }
 
   if (parsed.command === "memory") {
@@ -370,7 +379,9 @@ export async function main() {
       return;
     }
 
-    const result = await runCli(argv);
+    const result = await runCli(argv, {
+      color: mode.color
+    });
     if (result.stdout) {
       process.stdout.write(result.stdout);
     }
@@ -504,6 +515,7 @@ Usage:
              [--template <name>] [--root <dir>]
   atlas doctor [--fix [--reset-skills]] [--force] [--json] [--check-updates]
                [--adopt-skills] [--handoff context-size]
+  atlas status [--json]
   atlas memory pull
   atlas memory propose
   atlas update
@@ -518,6 +530,7 @@ Commands:
   doctor --handoff context-size
                 Print a safe agent prompt for context-size cleanup; exits 0
                 when the prompt (or a no-op notice) is printed
+  status        Print a read-only workspace dashboard; always exits 0
   memory pull   Vendor the pinned memory.shared git tree into the configured
                 shared memory tier and record hashes in atlas.lock.json
   memory propose
@@ -538,7 +551,7 @@ Options:
   --here             Allow init inside a repository subdirectory
                      (deliberate nested workspace, e.g. a monorepo package)
   --ci               Force the non-interactive path (also implied by CI=1)
-  --json             doctor only: print findings as JSON
+  --json             doctor/status only: print machine-readable JSON
   --handoff <topic>  doctor only: print an agent handoff prompt
                      (supported topic: context-size)
   --reset-skills     doctor --fix only: overwrite customized managed skills

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unpkg.com/@blazity-atlas/core@0.5.0/schema/atlas-lock.schema.json",
+  "title": "Atlas lockfile",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "atlasVersion",
+    "files"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "atlasVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "files": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "sha256"
+        ],
+        "properties": {
+          "sha256": {
+            "type": "string"
+          },
+          "packaged": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": true
+}

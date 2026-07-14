@@ -2,6 +2,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { normalizePath, resolveArtifactPath } from "./config.js";
+import { isFeatureEnabled } from "./features.js";
 import { repoPath } from "./repo.js";
 import { managedSkillFiles } from "./templates.js";
 
@@ -153,26 +154,30 @@ export async function collectContextFileCandidates(repoRoot, config, io) {
     promptLoaded: true
   }, io));
 
-  candidates.push(...await markdownFiles(repoRoot, resolveArtifactPath(config, "decisions"), {
-    category: "decision",
-    thresholdKey: "decision",
-    promptLoaded: false
-  }, io));
-
-  candidates.push(...await markdownFiles(repoRoot, resolveArtifactPath(config, "adrs"), {
-    category: "decision",
-    thresholdKey: "decision",
-    promptLoaded: false
-  }, io));
-
-  const skillsRoot = resolveArtifactPath(config, "skills");
-  for (const [skillName, fileName] of managedSkillFiles) {
-    candidates.push({
-      relativePath: normalizePath(path.join(skillsRoot, skillName, fileName)),
-      category: "managed-skill",
-      thresholdKey: "managedSkill",
+  if (isFeatureEnabled(config, "decisions")) {
+    candidates.push(...await markdownFiles(repoRoot, resolveArtifactPath(config, "decisions"), {
+      category: "decision",
+      thresholdKey: "decision",
       promptLoaded: false
-    });
+    }, io));
+
+    candidates.push(...await markdownFiles(repoRoot, resolveArtifactPath(config, "adrs"), {
+      category: "decision",
+      thresholdKey: "decision",
+      promptLoaded: false
+    }, io));
+  }
+
+  if (isFeatureEnabled(config, "managedSkills")) {
+    const skillsRoot = resolveArtifactPath(config, "skills");
+    for (const [skillName, fileName] of managedSkillFiles) {
+      candidates.push({
+        relativePath: normalizePath(path.join(skillsRoot, skillName, fileName)),
+        category: "managed-skill",
+        thresholdKey: "managedSkill",
+        promptLoaded: false
+      });
+    }
   }
 
   return dedupeCandidates(candidates);

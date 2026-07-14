@@ -13,13 +13,14 @@ import { buildContextSizeHandoffPrompt } from "./context-size.js";
 import { proposeOrgMemory, pullSharedMemory } from "./memory.js";
 import { exitCodeForFindings, formatFindings } from "./output.js";
 import { describeDirtyStatus, fileExists, gitStatus, isGitRepo } from "./repo.js";
+import { applySuppression } from "./suppression.js";
 import { runUpdateCheck, updateAdvisoryFinding } from "./update.js";
 import { packageVersion } from "./version.js";
 import { detectMode } from "./ui/runtime.js";
 import { runInteractiveInit } from "./ui/flow.js";
 import { colorizeDoctorOutput, doctorMark, offerContextSizeHandoff } from "./ui/doctor.js";
 
-const initFlags = ["dry-run", "force", "yes", "ci", "here", "template", "root"];
+const initFlags = ["dry-run", "force", "yes", "ci", "here", "template", "root", "minimal"];
 
 export async function runCli(argv = process.argv.slice(2), options = {}) {
   const cwd = options.cwd ?? process.cwd();
@@ -59,6 +60,7 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
       dryRun: parsed.flags.has("dry-run"),
       force: parsed.flags.has("force"),
       here: parsed.flags.has("here"),
+      profile: parsed.flags.has("minimal") ? "minimal" : "full",
       templateName,
       root: parsed.flags.get("root")
     });
@@ -192,7 +194,7 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
     }
 
     const diagnostics = options.diagnostics ?? {};
-    const findings = await collectDoctorFindings(cwd, { diagnostics, resetSkills: parsed.flags.has("reset-skills") });
+    let findings = await collectDoctorFindings(cwd, { diagnostics, resetSkills: parsed.flags.has("reset-skills") });
 
     if (parsed.flags.has("check-updates")) {
       const advisory = await updateAdvisoryFinding(options.fetchImpl);
@@ -201,12 +203,16 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
       }
     }
 
+    const suppression = await suppressFindings(cwd, findings);
+    findings = suppression.findings;
+
     if (parsed.flags.has("json")) {
       const exitCode = exitCodeForFindings(findings);
       const payload = {
         classification: classifyFindings(findings),
         exitCode,
-        findings: findings.map(serializeFinding)
+        findings: findings.map(serializeFinding),
+        suppressed: suppression.suppressed.map(serializeFinding)
       };
       return { exitCode, stdout: `${JSON.stringify(payload, null, 2)}\n`, stderr: "" };
     }
@@ -244,7 +250,7 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
         ? manual.filter((finding) => finding.code !== "atlas-version-ahead")
         : manual;
       if (blocking.length > 0) {
-        return { exitCode: 2, stdout: formatFindings(findings), stderr: "" };
+        return { exitCode: 2, stdout: formatFindings(findings, { suppressed: suppression.suppressed }), stderr: "" };
       }
       const fixable = findings.filter((finding) => finding.fixable);
       if (!parsed.flags.has("force") && fixable.length > 0) {
@@ -261,7 +267,7 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
       await finalizeWorkspaceMetadata(cwd);
       return {
         exitCode: 0,
-        stdout: `Atlas doctor --fix\n${formatFindings(findings, { emptyMessage: "No issues found.", fixableHeading: "Applied fixes:" })}`,
+        stdout: `Atlas doctor --fix\n${formatFindings(findings, { emptyMessage: "No issues found.", fixableHeading: "Applied fixes:", suppressed: suppression.suppressed })}`,
         stderr: ""
       };
     }
@@ -278,7 +284,7 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
 
     return {
       exitCode: exitCodeForFindings(findings),
-      stdout: `Atlas doctor\n${formatFindings(findings)}`,
+      stdout: `Atlas doctor\n${formatFindings(findings, { suppressed: suppression.suppressed })}`,
       stderr: ""
     };
   }
@@ -339,6 +345,7 @@ export async function main() {
         color: mode.color,
         force: parsed.flags.has("force"),
         here: parsed.flags.has("here"),
+        profile: parsed.flags.has("minimal") ? "minimal" : undefined,
         root: parsed.flags.get("root")
       });
       return;
@@ -383,6 +390,14 @@ async function workspaceInitialized(cwd) {
     return true;
   }
   return fileExists(configPath(cwd, discovered.root));
+}
+
+async function suppressFindings(cwd, findings) {
+  const loaded = await loadConfig(cwd);
+  if (!loaded.exists || loaded.errors.length > 0) {
+    return { findings, suppressed: [] };
+  }
+  return applySuppression(findings, loaded.config);
 }
 
 async function loadMemoryCommandConfig(cwd) {
@@ -485,7 +500,8 @@ function helpText() {
   return `Atlas CLI — repo-owned AI context for coding agents
 
 Usage:
-  atlas init [--dry-run] [--force] [--yes] [--ci] [--here] [--template <name>] [--root <dir>]
+  atlas init [--dry-run] [--force] [--yes] [--ci] [--here] [--minimal]
+             [--template <name>] [--root <dir>]
   atlas doctor [--fix [--reset-skills]] [--force] [--json] [--check-updates]
                [--adopt-skills] [--handoff context-size]
   atlas memory pull
@@ -513,6 +529,8 @@ Commands:
 Options:
   --root <dir>       Workspace root for init (repo-relative; default .ai)
   --template <name>  Workspace template for init (default standard)
+  --minimal          Init only config, AGENTS.md, CLAUDE.md, memory, and
+                     vocabulary; disabled features can be enabled later
   --dry-run          Preview init changes without writing anything
   --yes              Skip prompts and take the non-interactive path;
                      does not bypass the dirty-worktree refusal

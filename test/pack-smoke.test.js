@@ -28,6 +28,7 @@ test("packed CLI initializes and doctors a temp repo", async () => {
     const customization = await readFile(path.join(repo, ".ai/skills/atlas-setup/customization.md"), "utf8");
     const reviewSkill = await readFile(path.join(repo, ".ai/skills/atlas-review/SKILL.md"), "utf8");
     const compactSkill = await readFile(path.join(repo, ".ai/skills/atlas-compact/SKILL.md"), "utf8");
+    const memorySkill = await readFile(path.join(repo, ".ai/skills/atlas-memory/SKILL.md"), "utf8");
 
     assert.match(init.stdout, /Atlas init/);
     assert.match(doctor.stdout, /No issues found/);
@@ -38,6 +39,7 @@ test("packed CLI initializes and doctors a temp repo", async () => {
     assert.match(customization, /Atlas Customization/);
     assert.match(reviewSkill, /name: atlas-review/);
     assert.match(compactSkill, /name: atlas-compact/);
+    assert.match(memorySkill, /name: atlas-memory/);
   } finally {
     if (tarball) {
       await rm(tarball, { force: true });
@@ -76,6 +78,7 @@ test("package includes standalone managed skills but excludes Claude plugin meta
     assert(files.includes("skills/atlas-setup/SKILL.md"));
     assert(files.includes("skills/atlas-setup/customization.md"));
     assert(files.includes("skills/atlas-review/SKILL.md"));
+    assert(files.includes("skills/atlas-memory/SKILL.md"));
     assert(!files.includes(".claude-plugin/plugin.json"));
   } finally {
     if (tarball) {

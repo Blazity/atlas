@@ -48,6 +48,64 @@ test("validates required config fields", () => {
   assert.match(invalid.errors.join("\n"), /pathAliases/);
 });
 
+test("rejects shared memory values that could be parsed as git options", () => {
+  const config = {
+    ...createDefaultConfig(),
+    memory: {
+      shared: {
+        source: "file:///tmp/org-memory",
+        ref: "main",
+        pin: "a".repeat(40)
+      }
+    }
+  };
+
+  for (const key of ["source", "ref", "pin"]) {
+    const invalid = validateConfig({
+      ...config,
+      memory: {
+        shared: {
+          ...config.memory.shared,
+          [key]: "--upload-pack=/tmp/evil.sh"
+        }
+      }
+    });
+
+    assert.match(invalid.errors.join("\n"), new RegExp(`memory\\.shared\\.${key}`));
+    assert.match(invalid.errors.join("\n"), /must not start with -/);
+  }
+});
+
+test("requires shared memory pins to be full lowercase commit shas", () => {
+  const config = {
+    ...createDefaultConfig(),
+    memory: {
+      shared: {
+        source: "file:///tmp/org-memory",
+        ref: "main",
+        pin: "a".repeat(40)
+      }
+    }
+  };
+
+  assert.equal(validateConfig(config).valid, true);
+
+  for (const pin of ["FETCH_HEAD", "abc123", "A".repeat(40), "g".repeat(40), "a".repeat(39)]) {
+    const invalid = validateConfig({
+      ...config,
+      memory: {
+        shared: {
+          ...config.memory.shared,
+          pin
+        }
+      }
+    });
+
+    assert.match(invalid.errors.join("\n"), /memory\.shared\.pin/);
+    assert.match(invalid.errors.join("\n"), /40-character lowercase hex/);
+  }
+});
+
 test("scaffolds new configs with the setupState sentinel and all agent surfaces", () => {
   const config = createConfigForTemplate("standard");
 

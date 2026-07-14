@@ -146,7 +146,9 @@ export function validateConfig(config) {
       errors.push(`features must be an object with boolean keys: ${featureNames.join(", ")}`);
     } else {
       for (const [featureName, enabled] of Object.entries(config.features)) {
-        if (!featureNames.includes(featureName)) {
+        if (featureName === "graph") {
+          addGraphFeatureErrors(enabled, errors);
+        } else if (!featureNames.includes(featureName)) {
           errors.push(`features.${featureName} is not a known feature`);
         } else if (typeof enabled !== "boolean") {
           errors.push(`features.${featureName} must be a boolean`);
@@ -189,14 +191,9 @@ export function validateConfig(config) {
     errors.push("paths must be an object");
   } else {
     for (const key of requiredPaths) {
-      if (typeof config.paths[key] !== "string" || config.paths[key].trim() === "") {
-        errors.push(`paths.${key} must be a non-empty string`);
-      } else if (hasParentPathSegment(config.paths[key])) {
-        errors.push(`paths.${key} must not contain .. path segments`);
-      } else if (!path.isAbsolute(config.paths[key]) && pathEscapesRoot(config.paths[key])) {
-        errors.push(`paths.${key} must not escape artifactRoot`);
-      }
+      addPathRuleErrors(config.paths, key, errors);
     }
+    addPathRuleErrors(config.paths, "graph", errors, { optional: true });
   }
 
   if (!config.pathAliases || typeof config.pathAliases !== "object" || Array.isArray(config.pathAliases)) {
@@ -340,7 +337,10 @@ export function configJsonSchema() {
       },
       features: {
         type: "object",
-        properties: Object.fromEntries(featureNames.map((featureName) => [featureName, { type: "boolean" }])),
+        properties: {
+          ...Object.fromEntries(featureNames.map((featureName) => [featureName, { type: "boolean" }])),
+          graph: graphFeatureJsonSchema()
+        },
         additionalProperties: false
       },
       doctor: {
@@ -360,11 +360,10 @@ export function configJsonSchema() {
       paths: {
         type: "object",
         required: requiredPaths,
-        properties: Object.fromEntries(requiredPaths.map((key) => [key, {
-          type: "string",
-          minLength: 1,
-          pattern: noParentPathSegmentPattern
-        }])),
+        properties: {
+          ...Object.fromEntries(requiredPaths.map((key) => [key, pathJsonSchema()])),
+          graph: pathJsonSchema()
+        },
         additionalProperties: {
           type: "string",
           pattern: noParentPathSegmentPattern
@@ -415,6 +414,83 @@ export function lockfileJsonSchema() {
     },
     additionalProperties: true
   };
+}
+
+function pathJsonSchema() {
+  return {
+    type: "string",
+    minLength: 1,
+    pattern: noParentPathSegmentPattern
+  };
+}
+
+function graphFeatureJsonSchema() {
+  return {
+    type: "object",
+    properties: {
+      enabled: { type: "boolean" },
+      staleCommitThreshold: { type: "integer", minimum: 0 },
+      generator: {
+        type: "object",
+        required: ["name", "version"],
+        properties: {
+          name: { type: "string", minLength: 1, pattern: "\\S" },
+          version: { type: "string", minLength: 1, pattern: "\\S" }
+        }
+      }
+    },
+    allOf: [{
+      if: { type: "object", properties: { enabled: { const: true } }, required: ["enabled"] },
+      then: { type: "object", required: ["generator"] }
+    }]
+  };
+}
+
+function addPathRuleErrors(paths, key, errors, options = {}) {
+  const value = paths[key];
+  if (value === undefined && options.optional) {
+    return;
+  }
+  if (typeof value !== "string" || value.trim() === "") {
+    errors.push(`paths.${key} must be a non-empty string`);
+  } else if (hasParentPathSegment(value)) {
+    errors.push(`paths.${key} must not contain .. path segments`);
+  } else if (!path.isAbsolute(value) && pathEscapesRoot(value)) {
+    errors.push(`paths.${key} must not escape artifactRoot`);
+  }
+}
+
+function addGraphFeatureErrors(graph, errors) {
+  if (!graph || typeof graph !== "object" || Array.isArray(graph)) {
+    errors.push("features.graph must be an object");
+    return;
+  }
+
+  if (graph.enabled !== undefined && typeof graph.enabled !== "boolean") {
+    errors.push("features.graph.enabled must be a boolean");
+  }
+
+  if (graph.staleCommitThreshold !== undefined && (!Number.isInteger(graph.staleCommitThreshold) || graph.staleCommitThreshold < 0)) {
+    errors.push("features.graph.staleCommitThreshold must be a non-negative integer");
+  }
+
+  if (graph.enabled === true && graph.generator === undefined) {
+    errors.push("features.graph.generator is required when features.graph.enabled is true");
+    return;
+  }
+
+  if (graph.generator !== undefined) {
+    if (!graph.generator || typeof graph.generator !== "object" || Array.isArray(graph.generator)) {
+      errors.push("features.graph.generator must be an object");
+      return;
+    }
+    if (typeof graph.generator.name !== "string" || graph.generator.name.trim() === "") {
+      errors.push("features.graph.generator.name must be a non-empty string");
+    }
+    if (typeof graph.generator.version !== "string" || graph.generator.version.trim() === "") {
+      errors.push("features.graph.generator.version must be a non-empty string");
+    }
+  }
 }
 
 function hasParentPathSegment(value) {

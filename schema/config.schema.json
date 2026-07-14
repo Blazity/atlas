@@ -74,6 +74,58 @@
         },
         "agentSymlinks": {
           "type": "boolean"
+        },
+        "graph": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "staleCommitThreshold": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "generator": {
+              "type": "object",
+              "required": [
+                "name",
+                "version"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "version": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                }
+              }
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "enabled"
+                ]
+              },
+              "then": {
+                "type": "object",
+                "required": [
+                  "generator"
+                ]
+              }
+            }
+          ]
         }
       },
       "additionalProperties": false
@@ -141,6 +193,11 @@
           "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
         },
         "skills": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+        },
+        "graph": {
           "type": "string",
           "minLength": 1,
           "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$)).+$"

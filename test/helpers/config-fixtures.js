@@ -6,7 +6,8 @@ export const configValidationFixtures = {
     createConfigForTemplate("standard"),
     legacyConfigFixture(),
     { ...createConfigForTemplate("standard"), doctor: { suppress: ["setup-pending"] } },
-    { ...createConfigForTemplate("standard"), features: { ...defaultFeatures, managedSkills: false } }
+    { ...createConfigForTemplate("standard"), features: { ...defaultFeatures, managedSkills: false } },
+    graphConfigFixture()
   ],
   reject: [
     { ...createConfigForTemplate("standard"), schemaVersion: 2 },
@@ -19,10 +20,29 @@ export const configValidationFixtures = {
     { ...createConfigForTemplate("standard"), doctor: { suppress: "setup-pending" } },
     { ...createConfigForTemplate("standard"), doctor: { silenced: ["setup-pending"] } },
     { ...createConfigForTemplate("standard"), features: { plans: "yes" } },
+    { ...graphConfigFixture(), paths: { ...graphConfigFixture().paths, graph: "graph/../../outside" } },
+    { ...graphConfigFixture(), features: { ...defaultFeatures, graph: { enabled: true, staleCommitThreshold: -1, generator: { name: "   ", version: "1.2.3" } } } },
     { ...createConfigForTemplate("standard"), agentSurfaces: ["vscode"] },
     { ...createConfigForTemplate("standard"), pathAliases: [] }
   ]
 };
+
+function graphConfigFixture() {
+  const config = createConfigForTemplate("standard");
+  return {
+    ...config,
+    paths: { ...config.paths, graph: "graph" },
+    features: {
+      ...config.features,
+      plans: false,
+      graph: {
+        enabled: true,
+        staleCommitThreshold: 10,
+        generator: { name: "graphify", version: "1.2.3" }
+      }
+    }
+  };
+}
 
 function legacyConfigFixture() {
   const { $schema, features, doctor, setupState, agentSurfaces, ...legacy } = createConfigForTemplate("standard");

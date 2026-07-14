@@ -13,6 +13,7 @@ import {
 } from "./config.js";
 import { analyzeContextSizes, contextSizeFinding } from "./context-size.js";
 import { disabledFeatureNames, isAliasTargetEnabled, isArtifactEnabled, isFeatureEnabled } from "./features.js";
+import { collectGraphFindings, graphFeatureConfig } from "./graph.js";
 import {
   baselineEntry,
   computeLockfileFiles,
@@ -34,13 +35,14 @@ import {
   defaultCustomizationMd,
   defaultClaudeMd,
   defaultConfigJson,
+  defaultGraphSkillMd,
   defaultLanguageMd,
   defaultMemorySkillMd,
   defaultReviewSkillMd,
   defaultSetupSkillMd,
   defaultMemoryReadme,
   managedBlockId,
-  managedSkillFiles,
+  managedSkillFilesForConfig,
   packagedSkillFileContent
 } from "./templates.js";
 
@@ -132,10 +134,12 @@ export async function collectDoctorFindings(repoRoot, options = {}) {
     addConfigMigrationFindings(repoRoot, root, config, findings);
   }
 
-  const lockfile = isFeatureEnabled(config, "managedSkills")
+  const hasManagedSkillFiles = managedSkillFilesForConfig(config).length > 0;
+  const needsLockfile = hasManagedSkillFiles || Boolean(config.memory?.shared);
+  const lockfile = needsLockfile
     ? await readLockfile(repoRoot, root)
-    : { exists: false, files: {}, error: null };
-  if (isFeatureEnabled(config, "managedSkills")) {
+    : { exists: false, files: {}, memory: {}, error: null };
+  if (needsLockfile) {
     if (lockfile.error) {
       findings.push(manualFinding("invalid-lockfile", `${lockfileRelativePath(root)} is not valid JSON: ${lockfile.error}`));
     } else if (loaded.exists && !lockfile.exists) {
@@ -156,20 +160,23 @@ export async function collectDoctorFindings(repoRoot, options = {}) {
   // Legacy moves must precede the managed-skill findings: applyFixes runs in
   // array order, so a legacy file is relocated before any managed write lands
   // on the new path (a write-first order would trip the move overwrite guard).
-  let managedSkillDriftFindings = [];
   if (isFeatureEnabled(config, "managedSkills")) {
     await addLegacySkillMigrationFindings(repoRoot, config, findings);
-    const beforeManagedSkillFindings = findings.length;
-    await addMaintenanceSkillFindings(repoRoot, config, findings, { lockfile, resetSkills: Boolean(options.resetSkills) });
-    managedSkillDriftFindings = findings.slice(beforeManagedSkillFindings);
   }
-  await addManagedFileFindings(repoRoot, root, findings);
+  const beforeManagedSkillFindings = findings.length;
+  if (isFeatureEnabled(config, "managedSkills")) {
+    await addMaintenanceSkillFindings(repoRoot, config, findings, { lockfile, resetSkills: Boolean(options.resetSkills) });
+  }
+  await addGraphSkillFindings(repoRoot, config, findings, { lockfile, resetSkills: Boolean(options.resetSkills) });
+  const managedSkillDriftFindings = findings.slice(beforeManagedSkillFindings);
+  await addManagedFileFindings(repoRoot, root, config, findings);
   if (isFeatureEnabled(config, "agentSymlinks")) {
     await addSkillLinkFindings(repoRoot, config, findings);
   }
   await addPlaceholderFindings(repoRoot, config, findings);
   await addAliasFindings(repoRoot, config, findings);
   await addSemanticHealthFindings(repoRoot, config, findings);
+  findings.push(...await collectGraphFindings(repoRoot, config));
   findings.push(...await collectMemoryFindings(repoRoot, config, lockfile));
   await addSecurityScanFindings(repoRoot, config, findings, { ...options, managedSkillDriftFindings });
   await addContextSizeFindings(repoRoot, config, findings, options.diagnostics);
@@ -200,7 +207,7 @@ export async function finalizeWorkspaceMetadata(repoRoot) {
     await writeText(configPath(repoRoot, loaded.root), `${JSON.stringify(next, null, 2)}\n`);
   }
 
-  if (!isFeatureEnabled(loaded.config, "managedSkills")) {
+  if (managedSkillFilesForConfig(loaded.config).length === 0 && !loaded.config.memory?.shared) {
     return;
   }
 
@@ -228,7 +235,7 @@ export async function adoptSkills(repoRoot) {
   const adopted = [];
   const files = {};
 
-  for (const [skillName, fileName] of managedSkillFiles) {
+  for (const [skillName, fileName] of managedSkillFilesForConfig(loaded.config)) {
     const relativePath = managedFileRelativePath(loaded.config, skillName, fileName);
     const current = await readTextIfExists(repoPath(repoRoot, relativePath));
     if (current === null) {
@@ -550,6 +557,29 @@ async function addMaintenanceSkillFindings(repoRoot, config, findings, driftOpti
   });
 }
 
+async function addGraphSkillFindings(repoRoot, config, findings, driftOptions) {
+  if (graphFeatureConfig(config).enabled) {
+    await addManagedSkillFileFinding(repoRoot, config, findings, {
+      ...driftOptions,
+      skillName: "atlas-graph",
+      fileName: "SKILL.md",
+      content: defaultGraphSkillMd(),
+      missingCode: "missing-graph-skill",
+      staleCode: "stale-graph-skill",
+      description: "graph skill"
+    });
+    return;
+  }
+
+  const relativePath = normalizePath(path.join(resolveArtifactPath(config, "skills"), "atlas-graph"));
+  if ((await getPathKind(repoPath(repoRoot, relativePath))) === "directory") {
+    findings.push(advisoryFinding(
+      "graph-skill-orphaned",
+      `${relativePath} exists but features.graph is not enabled — enable features.graph or remove ${relativePath} and run doctor --fix to refresh the lockfile`
+    ));
+  }
+}
+
 async function addManagedSkillFileFinding(repoRoot, config, findings, options) {
   const relativePath = managedFileRelativePath(config, options.skillName, options.fileName);
   const absolutePath = repoPath(repoRoot, relativePath);
@@ -618,7 +648,7 @@ async function addManagedSkillFileFinding(repoRoot, config, findings, options) {
   ));
 }
 
-async function addManagedFileFindings(repoRoot, root, findings) {
+async function addManagedFileFindings(repoRoot, root, config, findings) {
   const agentsPath = repoPath(repoRoot, "AGENTS.md");
   const currentAgents = await readTextIfExists(agentsPath);
   if (currentAgents !== null) {
@@ -634,8 +664,8 @@ async function addManagedFileFindings(repoRoot, root, findings) {
   }
 
   const nextAgents = currentAgents === null
-    ? applyManagedBlock("# Project AI Instructions\n", managedBlockId, agentManagedBlock(root))
-    : applyManagedBlock(currentAgents, managedBlockId, agentManagedBlock(root));
+    ? applyManagedBlock("# Project AI Instructions\n", managedBlockId, agentManagedBlock(root, config))
+    : applyManagedBlock(currentAgents, managedBlockId, agentManagedBlock(root, config));
 
   if (currentAgents !== nextAgents) {
     const blockExists = currentAgents !== null && inspectManagedBlock(currentAgents, managedBlockId).state === "present";

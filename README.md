@@ -33,6 +33,7 @@ Atlas (by [Blazity](https://blazity.com)) gives the repository one place for all
 - 🧩 **Plays well with skills** — third-party and custom skills route their documentation output through `.ai/config.json` instead of inventing new folders
 - 📦 **Builds on what you have** — config-driven path aliases adopt your existing docs folders instead of replacing them
 - 🩺 **Machine-checked** — `atlas doctor` verifies the structure in CI with frozen exit codes; `--fix` repairs drift deterministically
+- 🕸️ **Optional repo graph** — track a generated repository knowledge graph with freshness and generator-drift advisories (opt-in)
 - 📊 **One-screen status** — `atlas status` shows workspace health, artifact freshness, and context budgets; `--json` for scripting
 - 🪜 **Starts as small as you want** — `init --minimal` scaffolds just the core, and config migrations keep older workspaces current
 - 🧠 **Memory with a lifecycle** — entries carry verified/cites/supersede metadata, `doctor` flags stale or duplicated facts, and `atlas memory pull` syncs a pinned org-wide memory source
@@ -85,6 +86,43 @@ This repository runs on Atlas. Its own workspace is the demo:
 If your repo already keeps docs in conventional places (`docs/adrs`, `docs/specs`, …), Atlas maps them into the workspace through config-driven `pathAliases` instead of inventing a parallel documentation system — `doctor --fix` performs the moves, and the config keeps routing future writes.
 
 The published config schema lives at [`schema/config.schema.json`](schema/config.schema.json), and scaffolded configs include a `$schema` reference for editor completion. Runtime validation remains hand-rolled and dependency-free.
+
+## Optional repository graph
+
+Atlas can track a generated repository knowledge graph, but the feature is opt-in: scaffolded configs do not include `paths.graph` or `features.graph`, and repos that leave it disabled get no graph findings or graph skill scaffold.
+
+To enable it, add a graph feature block and optionally pin the graph path:
+
+```json
+{
+  "paths": {
+    "graph": "graph"
+  },
+  "features": {
+    "graph": {
+      "enabled": true,
+      "staleCommitThreshold": 50,
+      "generator": {
+        "name": "graphify",
+        "version": "1.2.3"
+      }
+    }
+  }
+}
+```
+
+When `paths.graph` is absent, Atlas resolves the default `graph` path under `artifactRoot`. Graph generators write their artifacts there plus `graph.meta.json`:
+
+```json
+{
+  "generator": { "name": "graphify", "version": "1.2.3" },
+  "buildSha": "<git sha>",
+  "scope": "code",
+  "provenance": "extracted"
+}
+```
+
+`atlas doctor` never runs a generator. When graph support is enabled, it reports graph metadata problems as advisories only: missing or invalid sidecars, stale `buildSha` values, and generator-version drift from the pinned config. The optional `atlas-graph` managed skill detects a user-installed graphify CLI, runs it in code-only/offline mode, writes the sidecar, and shows the diff for review.
 
 ## Workspace status
 

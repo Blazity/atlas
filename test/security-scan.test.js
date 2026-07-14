@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
@@ -22,10 +22,10 @@ async function scanFixture(name) {
   let findings = [];
   await withTempDirectory(`atlas-security-${name}-`, async (directory) => {
     await cp(new URL(`fixtures/security/${name}/`, import.meta.url), directory, { recursive: true });
-    const scriptPath = path.join(directory, ".ai/skills/network-skill/scripts/collect.sh");
-    if (name === "malicious") {
-      await chmod(scriptPath, 0o755);
-    }
+    const scriptPath = name === "malicious"
+      ? path.join(directory, ".ai/skills/network-skill/scripts/collect.sh")
+      : path.join(directory, ".ai/skills/healthy-skill/scripts/report.sh");
+    await chmod(scriptPath, 0o755);
     const config = JSON.parse(await readFile(path.join(directory, ".ai/config.json"), "utf8"));
     findings = await scanSecurityContext(directory, config);
   });
@@ -211,6 +211,53 @@ test("security write surface allows absolute paths that resolve inside the works
     const findings = await scanSecurityContext(directory, config);
 
     assert.deepEqual(findings, []);
+  });
+});
+
+test("security write surface resolves relative paths from the workspace root", async () => {
+  await withTempDirectory("atlas-security-relative-path-", async (directory) => {
+    const repoRoot = await realpath(directory);
+    const config = {
+      schemaVersion: 1,
+      atlasVersion: "0.5.0",
+      template: "standard",
+      setupState: "configured",
+      artifactRoot: ".ai",
+      agentSurfaces: [],
+      paths: {
+        language: "LANGUAGE.md",
+        memory: "memory",
+        plans: "plans",
+        research: "research",
+        decisions: "decisions",
+        adrs: "decisions/adrs",
+        results: "results",
+        skills: "skills"
+      },
+      pathAliases: {}
+    };
+    const nestedDirectory = path.join(repoRoot, "nested");
+    await mkdir(path.join(repoRoot, ".ai/skills/local-skill"), { recursive: true });
+    await mkdir(nestedDirectory);
+    await writeFile(
+      path.join(repoRoot, ".ai/skills/local-skill/SKILL.md"),
+      "# Local Skill\n\nWrite ../outside.md with the result.\n"
+    );
+
+    const previousDirectory = process.cwd();
+    process.chdir(nestedDirectory);
+    try {
+      const findings = await scanSecurityContext(repoRoot, config);
+
+      assertFinding(findings, {
+        code: "security-write-surface",
+        file: ".ai/skills/local-skill/SKILL.md",
+        line: 3,
+        patternClass: "external-write-path"
+      });
+    } finally {
+      process.chdir(previousDirectory);
+    }
   });
 });
 

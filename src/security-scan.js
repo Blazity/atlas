@@ -83,7 +83,7 @@ export async function scanSecurityContext(repoRoot, config, options = {}) {
       findings.push(...scanInjectionPhrases(target, content, injectionPatterns));
     }
     if (target.writeSurface) {
-      findings.push(...scanWriteSurface(repoRoot, target, content, managedRegions));
+      findings.push(...scanWriteSurface(repoRoot, target, content));
     }
   }
 
@@ -311,31 +311,23 @@ function scanExfiltrationShapes(target, content) {
   return findings;
 }
 
-function scanWriteSurface(repoRoot, target, content, managedRegions) {
+function scanWriteSurface(repoRoot, target, content) {
   const findings = [];
-  const regions = target.instructionFile || target.relativePath !== "AGENTS.md"
-    ? [{ start: 0, end: content.length }]
-    : managedRegions;
-
-  for (const region of regions) {
-    const text = content.slice(region.start, region.end);
-    forEachLine(text, (line, relativeLineNumber, offset) => {
-      const absoluteOffset = region.start + offset;
-      for (const clause of clauseSegments(line)) {
-        if (isNegatedDirective(clause.text) || !hasDirectiveExternalWritePath(clause.text, repoRoot)) {
-          continue;
-        }
-        findings.push(securityFinding({
-          code: securityCodes.writeSurface,
-          file: target.relativePath,
-          line: lineForOffset(content, absoluteOffset + clause.offset),
-          patternClass: "external-write-path",
-          summary: "directs agents to modify files outside configured Atlas paths",
-          remediation: "Route writes through `.ai/config.json` paths or remove the external write instruction."
-        }));
+  forEachLine(content, (line, lineNumber) => {
+    for (const clause of clauseSegments(line)) {
+      if (isNegatedDirective(clause.text) || !hasDirectiveExternalWritePath(clause.text, repoRoot)) {
+        continue;
       }
-    });
-  }
+      findings.push(securityFinding({
+        code: securityCodes.writeSurface,
+        file: target.relativePath,
+        line: lineNumber,
+        patternClass: "external-write-path",
+        summary: "directs agents to modify files outside configured Atlas paths",
+        remediation: "Route writes through `.ai/config.json` paths or remove the external write instruction."
+      }));
+    }
+  });
 
   return findings;
 }
@@ -603,7 +595,7 @@ function pathResolvesInsideWorkspace(value, repoRoot) {
   if (value.startsWith("~")) {
     return false;
   }
-  const relative = path.relative(path.resolve(repoRoot), path.resolve(value));
+  const relative = path.relative(path.resolve(repoRoot), path.resolve(repoRoot, value));
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 

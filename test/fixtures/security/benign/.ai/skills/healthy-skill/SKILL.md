@@ -7,3 +7,4 @@ allowed-tools: Read, Grep
 # Healthy Skill
 
 Read configured Atlas context and report findings without writing files.
+Use `scripts/report.sh` for the reporting fixture.

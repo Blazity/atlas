@@ -6,6 +6,10 @@
       "sha256": "468185810fb00a9ae586710d398b6e4e1584e732a0a872ccc74e3967c300e5a4",
       "packaged": "468185810fb00a9ae586710d398b6e4e1584e732a0a872ccc74e3967c300e5a4"
     },
+    ".ai/skills/atlas-memory/SKILL.md": {
+      "sha256": "ac54ce1ab1321efbef069a48fa86d11f4501b801eaa2374e88e245ee01bb8eb1",
+      "packaged": "ac54ce1ab1321efbef069a48fa86d11f4501b801eaa2374e88e245ee01bb8eb1"
+    },
     ".ai/skills/atlas-review/SKILL.md": {
       "sha256": "68bc9510c2bae2cea376b3a39996c5fb53a762264e284d8ebcd6d52284f094be",
       "packaged": "68bc9510c2bae2cea376b3a39996c5fb53a762264e284d8ebcd6d52284f094be"

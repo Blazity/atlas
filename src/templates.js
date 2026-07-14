@@ -5,8 +5,8 @@ import { createConfigForTemplate, normalizePath } from "./config.js";
 
 export const managedBlockId = "artifact-paths";
 
-export function defaultConfigJson(templateName = "standard", root = ".ai") {
-  return `${JSON.stringify(createConfigForTemplate(templateName, root), null, 2)}\n`;
+export function defaultConfigJson(templateName = "standard", root = ".ai", options = {}) {
+  return `${JSON.stringify(createConfigForTemplate(templateName, root, options), null, 2)}\n`;
 }
 
 export function agentManagedBlock(root = ".ai") {
@@ -23,7 +23,12 @@ export function agentManagedBlock(root = ".ai") {
     "",
     "Durable documentation records needs, decisions, and reasons — never individuals or internal process.",
     'Write "memory was needed to persist context across runs", not "<name> wanted memory".',
-    "Keep personal names, private schedules, internal-only references, and absolute local paths out of workspace artifacts."
+    "Keep personal names, private schedules, internal-only references, and absolute local paths out of workspace artifacts.",
+    "",
+    "## Atlas Session Protocol",
+    "",
+    "Session start: read the configured memory index before relying on prior context.",
+    "Session end: capture durable lessons with the atlas-memory skill before closing meaningful work."
   ].join("\n");
 }
 
@@ -52,6 +57,18 @@ export function defaultMemoryReadme() {
     "Stable product, architecture, stack, and lessons memory for AI agents.",
     "Keep volatile task status in the issue tracker, not here.",
     "",
+    "## Entry Format",
+    "",
+    "Memory entries are markdown sections. Add Atlas metadata on the line immediately after the heading when the entry should participate in lifecycle checks:",
+    "",
+    "```markdown",
+    "## Bare managed-skill names collide in shared namespaces",
+    "<!-- atlas: id=skill-name-collisions verified=2026-06-12 cites=src/templates.js scope=repo -->",
+    "```",
+    "",
+    "All metadata keys are optional: `id`, `verified`, `cites`, `scope`, `source`, and `superseded-by`.",
+    "Plain markdown remains valid memory; entries without Atlas metadata are not checked for age, citations, dedupe, or supersede links.",
+    "",
     "Good entry: \"Payments run through an adapter because the provider API changed twice.\"",
     "Weak entry: \"Payments were discussed.\" Record needs, decisions, and reasons."
   ].join("\n");
@@ -63,7 +80,8 @@ export const managedSkillFiles = [
   ["atlas-setup", "SKILL.md"],
   ["atlas-setup", "customization.md"],
   ["atlas-review", "SKILL.md"],
-  ["atlas-compact", "SKILL.md"]
+  ["atlas-compact", "SKILL.md"],
+  ["atlas-memory", "SKILL.md"]
 ];
 
 export function defaultSetupSkillMd() {
@@ -82,6 +100,10 @@ export function defaultCompactSkillMd() {
   return readPackagedSkillFile("atlas-compact/SKILL.md");
 }
 
+export function defaultMemorySkillMd() {
+  return readPackagedSkillFile("atlas-memory/SKILL.md");
+}
+
 // Packaged managed-skill file content as written to disk (trailing newline).
 export function packagedSkillFileContent(skillName, fileName) {
   return `${readPackagedSkillFile(`${skillName}/${fileName}`)}\n`;
@@ -91,7 +113,17 @@ function readPackagedSkillFile(relativePath) {
   return readFileSync(new URL(`../skills/${relativePath}`, import.meta.url), "utf8").replace(/\n$/u, "");
 }
 
-export function setupHandoffPrompt(root = ".ai") {
+export function setupHandoffPrompt(root = ".ai", options = {}) {
+  if (options.profile === "minimal") {
+    const languagePath = normalizePath(path.join(root, "LANGUAGE.md"));
+    const memoryPath = normalizePath(path.join(root, "memory", "README.md"));
+    return [
+      `Read ${normalizePath(path.join(root, "config.json"))}, AGENTS.md, ${languagePath}, and ${memoryPath}.`,
+      "Capture only stable repository guidance: operating rules, vocabulary,",
+      "architecture memory, and documentation routing through the Atlas config."
+    ].join("\n");
+  }
+
   const setupSkillPath = normalizePath(path.join(root, "skills", "atlas-setup", "SKILL.md"));
   return [
     `Read ${setupSkillPath} and follow it to finish the Atlas setup on`,
@@ -101,23 +133,28 @@ export function setupHandoffPrompt(root = ".ai") {
   ].join("\n");
 }
 
-export function initNextStepText(root = ".ai") {
-  const indentedPrompt = setupHandoffPrompt(root)
+export function initNextStepText(root = ".ai", options = {}) {
+  const indentedPrompt = setupHandoffPrompt(root, options)
     .split("\n")
     .map((line) => `  ${line}`)
     .join("\n");
   const normalizedRoot = normalizePath(root);
-  const scaffoldPaths = [normalizedRoot, ".claude", ".agents", ".cursor", "AGENTS.md", "CLAUDE.md"];
+  const scaffoldPaths = options.profile === "minimal"
+    ? [normalizedRoot, "AGENTS.md", "CLAUDE.md"]
+    : [normalizedRoot, ".claude", ".agents", ".cursor", "AGENTS.md", "CLAUDE.md"];
   if (normalizedRoot !== ".ai") {
     scaffoldPaths.push(".atlas");
   }
-  return [
+  const lines = [
     "Next step — paste this to your coding agent:",
     "",
     indentedPrompt,
     "",
-    "Claude Code: run /atlas-setup (or /atlas:atlas-setup with the Atlas plugin)",
     "Repair drift later: atlas doctor --fix",
     `Commit the scaffold when ready: git add ${scaffoldPaths.join(" ")}`
-  ].join("\n");
+  ];
+  if (options.profile !== "minimal") {
+    lines.splice(4, 0, "Claude Code: run /atlas-setup (or /atlas:atlas-setup with the Atlas plugin)");
+  }
+  return lines.join("\n");
 }

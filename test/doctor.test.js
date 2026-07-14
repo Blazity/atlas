@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { lstat, mkdtemp, mkdir, readFile, readlink, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdtemp, mkdir, readFile, readlink, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -10,6 +10,7 @@ import { runCli } from "../src/cli.js";
 import { createDefaultConfig } from "../src/config.js";
 import { applyFixes, collectDoctorFindings, finalizeWorkspaceMetadata } from "../src/doctor.js";
 import { managedSkillFiles } from "../src/templates.js";
+import { packageVersion } from "../src/version.js";
 import { commitAll, createGitRepo } from "./helpers/git.js";
 
 const execFileAsync = promisify(execFile);
@@ -33,6 +34,24 @@ test("doctor reports missing config and managed files as fixable", async () => {
   });
 });
 
+test("doctor converts unexpected security scanner errors to one advisory", async () => {
+  await withTempRepo(async (directory) => {
+    await cp(new URL("fixtures/security/doctor-scan-failure/", import.meta.url), directory, { recursive: true });
+
+    const findings = await collectDoctorFindings(directory, {
+      securityScanner: async () => {
+        throw new Error("scanner exploded");
+      }
+    });
+    const failures = findings.filter((finding) => finding.code === "security-scan-failed");
+
+    assert.equal(failures.length, 1);
+    assert.equal(failures[0].severity, "advisory");
+    assert.equal(failures[0].fixable, false);
+    assert.match(failures[0].message, /security scan failed: scanner exploded/);
+  });
+});
+
 test("init creates a clean harness and is idempotent", async () => {
   await withTempRepo(async (directory) => {
     const first = await runCli(["init"], { cwd: directory });
@@ -53,6 +72,7 @@ test("init creates a clean harness and is idempotent", async () => {
     assert.match(first.stdout, /setup/);
     assert.match(first.stdout, /Claude Code: run \/atlas-setup \(or \/atlas:atlas-setup with the Atlas plugin\)/);
     assert.match(configAfterFirstRun, /"schemaVersion": 1/);
+    assert.equal(JSON.parse(configAfterFirstRun).$schema, `https://unpkg.com/@blazity-atlas/core@${packageVersion}/schema/config.schema.json`);
     assert.match(skillAfterFirstRun, /name: atlas-setup/);
     assert.match(skillAfterFirstRun, /Deterministic Bootstrap/);
     assert.match(skillAfterFirstRun, /npx --yes @blazity-atlas\/core@latest init/);
@@ -478,6 +498,46 @@ test("doctor reports setup-pending as an advisory without affecting the exit cod
   });
 });
 
+test("doctor suppresses configured fixable findings and exposes them in JSON", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+    await rm(path.join(directory, ".ai/plans/.gitkeep"));
+    const config = JSON.parse(await readFile(path.join(directory, ".ai/config.json"), "utf8"));
+    config.doctor = { suppress: ["missing-gitkeep"] };
+    await writeFile(path.join(directory, ".ai/config.json"), `${JSON.stringify(config, null, 2)}\n`);
+
+    const report = await runCli(["doctor"], { cwd: directory });
+    const json = await runCli(["doctor", "--json"], { cwd: directory });
+    const payload = JSON.parse(json.stdout);
+    const fix = await runCli(["doctor", "--fix", "--force"], { cwd: directory });
+
+    assert.equal(report.exitCode, 0);
+    assert.doesNotMatch(report.stdout, /\[missing-gitkeep\]/);
+    assert.match(report.stdout, /^Suppressed:\n- 1 finding hidden by doctor\.suppress$/m);
+    assert.equal(json.exitCode, 0);
+    assert.equal(payload.findings.some((finding) => finding.code === "missing-gitkeep"), false);
+    assert.equal(payload.suppressed.length, 1);
+    assert.equal(payload.suppressed[0].code, "missing-gitkeep");
+    assert.equal(fix.exitCode, 0);
+    await assert.rejects(stat(path.join(directory, ".ai/plans/.gitkeep")), /ENOENT/);
+  });
+});
+
+test("doctor rejects unknown or manual suppression codes", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+    const config = JSON.parse(await readFile(path.join(directory, ".ai/config.json"), "utf8"));
+    config.doctor = { suppress: ["missing-gitkeep", "file-collision", "not-a-finding"] };
+    await writeFile(path.join(directory, ".ai/config.json"), `${JSON.stringify(config, null, 2)}\n`);
+
+    const result = await runCli(["doctor"], { cwd: directory });
+
+    assert.equal(result.exitCode, 2);
+    assert.match(result.stdout, /\[invalid-suppression\] doctor\.suppress contains unknown finding code not-a-finding/);
+    assert.match(result.stdout, /\[invalid-suppression\] doctor\.suppress cannot include manual finding code file-collision/);
+  });
+});
+
 test("doctor clears setup-pending once setupState flips to configured", async () => {
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });
@@ -558,6 +618,126 @@ test("doctor reports oversized AI context as advisory-only and --fix does not mu
     assert.equal(fix.exitCode, 0);
     assert.equal(afterDoctor, beforeDoctor);
     assert.equal(afterFix, beforeDoctor);
+  });
+});
+
+test("doctor reports and applies config migrations through --fix", async () => {
+  await withTempRepo(async (directory) => {
+    const config = {
+      ...createDefaultConfig(),
+      atlasVersion: "0.3.0",
+      pathAliases: {
+        "docs/superpowers/plans": "plans",
+        "docs/superpowers/specs": "research",
+        "docs/adrs": "decisions/adrs"
+      }
+    };
+    await mkdir(path.join(directory, ".ai"), { recursive: true });
+    await writeFile(path.join(directory, ".ai/config.json"), `${JSON.stringify(config, null, 2)}\n`);
+
+    const before = await runCli(["doctor"], { cwd: directory });
+    const fix = await runCli(["doctor", "--fix", "--force"], { cwd: directory });
+    const afterConfig = JSON.parse(await readFile(path.join(directory, ".ai/config.json"), "utf8"));
+
+    assert.equal(before.exitCode, 1);
+    assert.match(before.stdout, /\[config-migration-available\]/);
+    assert.equal(fix.exitCode, 0);
+    assert.equal(afterConfig.atlasVersion, packageVersion);
+    assert.equal(afterConfig.pathAliases["docs/superpowers/plans"], undefined);
+    assert.equal(afterConfig.pathAliases["docs/superpowers/specs"], undefined);
+    assert.equal(afterConfig.pathAliases["docs/plans"], "plans");
+    assert.equal(afterConfig.pathAliases["docs/specs"], "research");
+  });
+});
+
+test("doctor reports pre-0.4 config migrations when atlasVersion is missing", async () => {
+  await withTempRepo(async (directory) => {
+    const { atlasVersion, ...config } = {
+      ...createDefaultConfig(),
+      pathAliases: {
+        "docs/superpowers/plans": "plans",
+        "docs/superpowers/specs": "research",
+        "docs/adrs": "decisions/adrs"
+      }
+    };
+    await mkdir(path.join(directory, ".ai"), { recursive: true });
+    await writeFile(path.join(directory, ".ai/config.json"), `${JSON.stringify(config, null, 2)}\n`);
+
+    const result = await runCli(["doctor"], { cwd: directory });
+
+    assert.equal(result.exitCode, 1);
+    assert.match(result.stdout, /\[config-migration-available\]/);
+  });
+});
+
+test("doctor ignores legacy-looking aliases once config has current version stamp", async () => {
+  await withTempRepo(async (directory) => {
+    const config = {
+      ...createDefaultConfig(),
+      atlasVersion: "0.3.0",
+      pathAliases: {
+        "docs/superpowers/plans": "plans",
+        "docs/superpowers/specs": "research"
+      }
+    };
+    await mkdir(path.join(directory, ".ai"), { recursive: true });
+    await writeFile(path.join(directory, ".ai/config.json"), `${JSON.stringify(config, null, 2)}\n`);
+    await runCli(["doctor", "--fix", "--force"], { cwd: directory });
+    await commitAll(directory);
+
+    const staleConfig = JSON.parse(await readFile(path.join(directory, ".ai/config.json"), "utf8"));
+    staleConfig.pathAliases = config.pathAliases;
+    await writeFile(path.join(directory, ".ai/config.json"), `${JSON.stringify(staleConfig, null, 2)}\n`);
+
+    const before = await runCli(["doctor"], { cwd: directory });
+
+    assert.equal(staleConfig.atlasVersion, packageVersion);
+    assert.equal(before.exitCode, 0);
+    assert.doesNotMatch(before.stdout, /config-migration/);
+  });
+});
+
+test("doctor does not migrate user-owned docs/superpowers aliases in 0.5 configs", async () => {
+  await withTempRepo(async (directory) => {
+    const config = {
+      ...createDefaultConfig(),
+      atlasVersion: "0.5.0",
+      pathAliases: {
+        "docs/superpowers/plans": "plans",
+        "docs/superpowers/specs": "research"
+      }
+    };
+    await mkdir(path.join(directory, ".ai"), { recursive: true });
+    await writeFile(path.join(directory, ".ai/config.json"), `${JSON.stringify(config, null, 2)}\n`);
+
+    const result = await runCli(["doctor"], { cwd: directory });
+
+    assert.doesNotMatch(result.stdout, /config-migration/);
+  });
+});
+
+test("doctor reports config migration conflicts as advisory details", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+    const current = JSON.parse(await readFile(path.join(directory, ".ai/config.json"), "utf8"));
+    const config = {
+      ...current,
+      atlasVersion: "0.3.0",
+      pathAliases: {
+        "docs/superpowers/plans": "custom-plans"
+      }
+    };
+    await writeFile(path.join(directory, ".ai/config.json"), `${JSON.stringify(config, null, 2)}\n`);
+
+    const report = await runCli(["doctor"], { cwd: directory });
+    const after = JSON.parse(await readFile(path.join(directory, ".ai/config.json"), "utf8"));
+
+    assert.equal(report.exitCode, 0);
+    assert.match(report.stdout, /\[config-migration-conflict\]/);
+    assert.match(report.stdout, /old default: docs\/superpowers\/plans -> plans/);
+    assert.match(report.stdout, /new default: docs\/plans -> plans/);
+    assert.match(report.stdout, /current value: custom-plans/);
+    assert.equal(after.pathAliases["docs/superpowers/plans"], "custom-plans");
   });
 });
 
@@ -740,7 +920,7 @@ test("doctor --fix --reset-skills restores the managed compact skill", async () 
   });
 });
 
-test("fresh init survives commit and clone with doctor exit 0", async () => {
+test("fresh init survives commit and clone without scratch-memory drift", async () => {
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });
     await commitAll(directory, "initialize atlas");
@@ -753,6 +933,7 @@ test("fresh init survives commit and clone with doctor exit 0", async () => {
       const doctor = await runCli(["doctor"], { cwd: clonePath });
 
       assert.equal(doctor.exitCode, 0);
+      assert.doesNotMatch(doctor.stdout, /missing-memory-local/);
       await stat(path.join(clonePath, ".ai/plans/.gitkeep"));
       await stat(path.join(clonePath, ".ai/research/.gitkeep"));
       await stat(path.join(clonePath, ".ai/results/.gitkeep"));
@@ -805,6 +986,56 @@ test("doctor only manages skill links for configured agent surfaces", async () =
     await assert.rejects(lstat(path.join(directory, ".agents/skills")), /ENOENT/);
     await assert.rejects(lstat(path.join(directory, ".cursor/skills")), /ENOENT/);
     assert.equal(after.exitCode, 0);
+  });
+});
+
+test("init --minimal scaffolds only the minimal feature set", async () => {
+  await withTempRepo(async (directory) => {
+    const init = await runCli(["init", "--minimal"], { cwd: directory });
+    const config = JSON.parse(await readFile(path.join(directory, ".ai/config.json"), "utf8"));
+    const doctor = await runCli(["doctor"], { cwd: directory });
+
+    assert.equal(init.exitCode, 0);
+    assert.equal(config.features.plans, false);
+    assert.equal(config.features.managedSkills, false);
+    assert.equal(config.features.agentSymlinks, false);
+    await stat(path.join(directory, ".ai/config.json"));
+    await stat(path.join(directory, "AGENTS.md"));
+    await stat(path.join(directory, "CLAUDE.md"));
+    await stat(path.join(directory, ".ai/memory/README.md"));
+    await stat(path.join(directory, ".ai/LANGUAGE.md"));
+    await assert.rejects(stat(path.join(directory, ".ai/plans")), /ENOENT/);
+    await assert.rejects(stat(path.join(directory, ".ai/research")), /ENOENT/);
+    await assert.rejects(stat(path.join(directory, ".ai/results")), /ENOENT/);
+    await assert.rejects(stat(path.join(directory, ".ai/skills")), /ENOENT/);
+    await assert.rejects(lstat(path.join(directory, ".claude/skills")), /ENOENT/);
+    assert.equal(doctor.exitCode, 0);
+    assert.doesNotMatch(doctor.stdout, /missing-directory|missing-setup-skill|missing-skill-link/);
+    assert.match(doctor.stdout, /\[feature-available\]/);
+  });
+});
+
+test("enabling minimal features lets doctor --fix scaffold them later", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init", "--minimal"], { cwd: directory });
+    let config = JSON.parse(await readFile(path.join(directory, ".ai/config.json"), "utf8"));
+    config.features = { ...config.features, plans: true, managedSkills: true, agentSymlinks: true };
+    await writeFile(path.join(directory, ".ai/config.json"), `${JSON.stringify(config, null, 2)}\n`);
+    await commitAll(directory);
+
+    const before = await runCli(["doctor"], { cwd: directory });
+    const fix = await runCli(["doctor", "--fix"], { cwd: directory });
+    config = JSON.parse(await readFile(path.join(directory, ".ai/config.json"), "utf8"));
+
+    assert.equal(before.exitCode, 1);
+    assert.match(before.stdout, /\[missing-directory\] \.ai\/plans is missing/);
+    assert.match(before.stdout, /\[missing-setup-skill\]/);
+    assert.match(before.stdout, /\[missing-skill-link\]/);
+    assert.equal(fix.exitCode, 0);
+    await stat(path.join(directory, ".ai/plans/.gitkeep"));
+    await stat(path.join(directory, ".ai/skills/atlas-setup/SKILL.md"));
+    assert.equal(await readlink(path.join(directory, ".claude/skills")), "../.ai/skills");
+    assert.equal(config.features.plans, true);
   });
 });
 

@@ -4,6 +4,7 @@ export function formatFindings(findings, options = {}) {
   const fixable = findings.filter((finding) => findingSeverity(finding) === "fixable");
   const manual = findings.filter((finding) => findingSeverity(finding) === "manual");
   const advisories = findings.filter((finding) => findingSeverity(finding) === "advisory");
+  const suppressed = options.suppressed ?? [];
   const sections = [];
 
   if (fixable.length > 0) {
@@ -21,6 +22,11 @@ export function formatFindings(findings, options = {}) {
 
   if (advisories.length > 0) {
     sections.push(findingSection(options.advisoryHeading ?? "Advisory:", advisories));
+  }
+
+  if (suppressed.length > 0) {
+    const noun = suppressed.length === 1 ? "finding" : "findings";
+    sections.push(`Suppressed:\n- ${suppressed.length} ${noun} hidden by doctor.suppress`);
   }
 
   return `${sections.join("\n\n")}\n`;

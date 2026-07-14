@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 import { runCli } from "../src/cli.js";
 import { createDefaultConfig } from "../src/config.js";
 import { applyFixes, collectDoctorFindings, finalizeWorkspaceMetadata } from "../src/doctor.js";
+import { configMigrations } from "../src/migrations.js";
 import { managedSkillFiles } from "../src/templates.js";
 import { packageVersion } from "../src/version.js";
 import { commitAll, createGitRepo } from "./helpers/git.js";
@@ -647,6 +648,29 @@ test("doctor reports and applies config migrations through --fix", async () => {
     assert.equal(afterConfig.pathAliases["docs/superpowers/specs"], undefined);
     assert.equal(afterConfig.pathAliases["docs/plans"], "plans");
     assert.equal(afterConfig.pathAliases["docs/specs"], "research");
+  });
+});
+
+test("doctor does not report a migration when a migration only reorders config keys", async () => {
+  await withTempRepo(async (directory) => {
+    const config = createDefaultConfig();
+    await mkdir(path.join(directory, ".ai"), { recursive: true });
+    await writeFile(path.join(directory, ".ai/config.json"), `${JSON.stringify(config, null, 2)}\n`);
+    configMigrations.unshift({
+      id: "test-key-order",
+      description: "reorder keys without changing config",
+      apply(current) {
+        return { config: Object.fromEntries(Object.entries(current).reverse()), changed: false, conflicts: [] };
+      }
+    });
+
+    try {
+      const findings = await collectDoctorFindings(directory);
+
+      assert.equal(findings.some((finding) => finding.code === "config-migration-available"), false);
+    } finally {
+      configMigrations.shift();
+    }
   });
 });
 

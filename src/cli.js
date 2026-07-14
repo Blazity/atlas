@@ -4,20 +4,24 @@ import {
   classifyFindings,
   collectDoctorFindings,
   discoverWorkspaceRoot,
-  finalizeWorkspaceMetadata
+  finalizeWorkspaceMetadata,
+  loadConfig
 } from "./doctor.js";
 import { runInit } from "./init.js";
 import { configPath, getTemplateNames, workspaceRootError } from "./config.js";
 import { buildContextSizeHandoffPrompt } from "./context-size.js";
+import { proposeOrgMemory, pullSharedMemory } from "./memory.js";
 import { exitCodeForFindings, formatFindings } from "./output.js";
 import { describeDirtyStatus, fileExists, gitStatus, isGitRepo } from "./repo.js";
+import { runStatus } from "./status.js";
+import { applySuppression } from "./suppression.js";
 import { runUpdateCheck, updateAdvisoryFinding } from "./update.js";
 import { packageVersion } from "./version.js";
 import { detectMode } from "./ui/runtime.js";
 import { runInteractiveInit } from "./ui/flow.js";
 import { colorizeDoctorOutput, doctorMark, offerContextSizeHandoff } from "./ui/doctor.js";
 
-const initFlags = ["dry-run", "force", "yes", "ci", "here", "template", "root"];
+const initFlags = ["dry-run", "force", "yes", "ci", "here", "template", "root", "minimal"];
 
 export async function runCli(argv = process.argv.slice(2), options = {}) {
   const cwd = options.cwd ?? process.cwd();
@@ -57,6 +61,7 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
       dryRun: parsed.flags.has("dry-run"),
       force: parsed.flags.has("force"),
       here: parsed.flags.has("here"),
+      profile: parsed.flags.has("minimal") ? "minimal" : "full",
       templateName,
       root: parsed.flags.get("root")
     });
@@ -68,6 +73,65 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
       return usageError(validation);
     }
     return runUpdateCheck({ cwd, fetchImpl: options.fetchImpl });
+  }
+
+  if (parsed.command === "status") {
+    const validation = validateFlags(parsed.flags, ["json"]);
+    if (validation) {
+      return usageError(validation);
+    }
+    return runStatus({ cwd, json: parsed.flags.has("json"), color: Boolean(options.color) });
+  }
+
+  if (parsed.command === "memory") {
+    const validation = validateFlags(parsed.flags, []);
+    if (validation) {
+      return usageError(validation);
+    }
+    if (!["pull", "propose"].includes(parsed.subcommand)) {
+      return usageError(parsed.subcommand ? `Unknown memory command: ${parsed.subcommand}` : "Missing memory command: use pull or propose");
+    }
+    if (!(await isGitRepo(cwd))) {
+      return { exitCode: 2, stdout: "", stderr: "Refusing to update memory: current directory is not a git repository.\n" };
+    }
+
+    const loaded = await loadMemoryCommandConfig(cwd);
+    if (!loaded.ok) {
+      return { exitCode: 2, stdout: "", stderr: loaded.error };
+    }
+
+    if (parsed.subcommand === "pull") {
+      const result = await pullSharedMemory(cwd, loaded.config, loaded.root, { execFile: options.execFileImpl });
+      if (!result.ok) {
+        return { exitCode: 2, stdout: "", stderr: `${result.error}\n` };
+      }
+      const lines = [
+        "Atlas memory pull",
+        "",
+        `Pulled shared memory at ${result.pin}`,
+        `Target: ${result.relativePath}`,
+        `Files: ${result.fileCount}`
+      ];
+      if (result.skippedNonMarkdownCount > 0) {
+        lines.push(`Skipped non-markdown files: ${result.skippedNonMarkdownCount}`);
+      }
+      if (result.skippedSymlinkCount > 0) {
+        lines.push(`Skipped symlinks: ${result.skippedSymlinkCount}`);
+      }
+      lines.push("");
+      return {
+        exitCode: 0,
+        stdout: lines.join("\n"),
+        stderr: ""
+      };
+    }
+
+    const result = await proposeOrgMemory(cwd, loaded.config);
+    const noun = result.entryCount === 1 ? "entry" : "entries";
+    const body = result.entryCount === 0
+      ? "No org memory entries found.\n"
+      : `Exported ${result.entryCount} org memory ${noun} to ${result.relativePath}\n`;
+    return { exitCode: 0, stdout: `Atlas memory propose\n\n${body}`, stderr: "" };
   }
 
   if (parsed.command === "doctor") {
@@ -139,7 +203,7 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
     }
 
     const diagnostics = options.diagnostics ?? {};
-    const findings = await collectDoctorFindings(cwd, { diagnostics, resetSkills: parsed.flags.has("reset-skills") });
+    let findings = await collectDoctorFindings(cwd, { diagnostics, resetSkills: parsed.flags.has("reset-skills") });
 
     if (parsed.flags.has("check-updates")) {
       const advisory = await updateAdvisoryFinding(options.fetchImpl);
@@ -148,13 +212,16 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
       }
     }
 
+    const suppression = await suppressFindings(cwd, findings);
+    findings = suppression.findings;
+
     if (parsed.flags.has("json")) {
       const exitCode = exitCodeForFindings(findings);
       const payload = {
         classification: classifyFindings(findings),
         exitCode,
-        findings: findings.map(({ code, message, severity, fixable, details }) =>
-          details ? { code, message, severity, fixable, details } : { code, message, severity, fixable })
+        findings: findings.map(serializeFinding),
+        suppressed: suppression.suppressed.map(serializeFinding)
       };
       return { exitCode, stdout: `${JSON.stringify(payload, null, 2)}\n`, stderr: "" };
     }
@@ -192,7 +259,7 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
         ? manual.filter((finding) => finding.code !== "atlas-version-ahead")
         : manual;
       if (blocking.length > 0) {
-        return { exitCode: 2, stdout: formatFindings(findings), stderr: "" };
+        return { exitCode: 2, stdout: formatFindings(findings, { suppressed: suppression.suppressed }), stderr: "" };
       }
       const fixable = findings.filter((finding) => finding.fixable);
       if (!parsed.flags.has("force") && fixable.length > 0) {
@@ -209,7 +276,7 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
       await finalizeWorkspaceMetadata(cwd);
       return {
         exitCode: 0,
-        stdout: `Atlas doctor --fix\n${formatFindings(findings, { emptyMessage: "No issues found.", fixableHeading: "Applied fixes:" })}`,
+        stdout: `Atlas doctor --fix\n${formatFindings(findings, { emptyMessage: "No issues found.", fixableHeading: "Applied fixes:", suppressed: suppression.suppressed })}`,
         stderr: ""
       };
     }
@@ -226,12 +293,27 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
 
     return {
       exitCode: exitCodeForFindings(findings),
-      stdout: `Atlas doctor\n${formatFindings(findings)}`,
+      stdout: `Atlas doctor\n${formatFindings(findings, { suppressed: suppression.suppressed })}`,
       stderr: ""
     };
   }
 
   return usageError(`Unknown command: ${parsed.command}`);
+}
+
+function serializeFinding(finding) {
+  const payload = {
+    code: finding.code,
+    message: finding.message,
+    severity: finding.severity,
+    fixable: finding.fixable
+  };
+  for (const key of ["file", "line", "patternClass", "remediation", "details"]) {
+    if (finding[key] !== undefined) {
+      payload[key] = finding[key];
+    }
+  }
+  return payload;
 }
 
 export async function main() {
@@ -272,6 +354,7 @@ export async function main() {
         color: mode.color,
         force: parsed.flags.has("force"),
         here: parsed.flags.has("here"),
+        profile: parsed.flags.has("minimal") ? "minimal" : undefined,
         root: parsed.flags.get("root")
       });
       return;
@@ -296,7 +379,9 @@ export async function main() {
       return;
     }
 
-    const result = await runCli(argv);
+    const result = await runCli(argv, {
+      color: mode.color
+    });
     if (result.stdout) {
       process.stdout.write(result.stdout);
     }
@@ -318,6 +403,25 @@ async function workspaceInitialized(cwd) {
   return fileExists(configPath(cwd, discovered.root));
 }
 
+async function suppressFindings(cwd, findings) {
+  const loaded = await loadConfig(cwd);
+  if (!loaded.exists || loaded.errors.length > 0) {
+    return { findings, suppressed: [] };
+  }
+  return applySuppression(findings, loaded.config);
+}
+
+async function loadMemoryCommandConfig(cwd) {
+  const loaded = await loadConfig(cwd);
+  if (!loaded.exists) {
+    return { ok: false, error: "Atlas is not set up in this repository. Run atlas init first.\n" };
+  }
+  if (loaded.errors.length > 0) {
+    return { ok: false, error: `Atlas config is invalid:\n${loaded.errors.map((error) => `- ${error}`).join("\n")}\n` };
+  }
+  return { ok: true, config: loaded.config, root: loaded.root };
+}
+
 function usageError(message) {
   return { exitCode: 2, stdout: "", stderr: `${message}\nRun atlas --help for usage.\n` };
 }
@@ -332,6 +436,7 @@ const valueFlags = new Set(["template", "root", "handoff"]);
 function parseArgs(argv) {
   const flags = new Map();
   let command = null;
+  let subcommand = null;
   let help = false;
   let version = false;
   let error = null;
@@ -367,12 +472,14 @@ function parseArgs(argv) {
       }
     } else if (!command) {
       command = arg;
+    } else if (command === "memory" && !subcommand) {
+      subcommand = arg;
     } else {
       error = `Unexpected argument: ${arg}`;
     }
   }
 
-  return { command, flags, help, version, error };
+  return { command, subcommand, flags, help, version, error };
 }
 
 function validateFlags(flags, allowedFlags) {
@@ -404,9 +511,13 @@ function helpText() {
   return `Atlas CLI — repo-owned AI context for coding agents
 
 Usage:
-  atlas init [--dry-run] [--force] [--yes] [--ci] [--here] [--template <name>] [--root <dir>]
+  atlas init [--dry-run] [--force] [--yes] [--ci] [--here] [--minimal]
+             [--template <name>] [--root <dir>]
   atlas doctor [--fix [--reset-skills]] [--force] [--json] [--check-updates]
                [--adopt-skills] [--handoff context-size]
+  atlas status [--json]
+  atlas memory pull
+  atlas memory propose
   atlas update
   atlas --version
 
@@ -414,16 +525,25 @@ Commands:
   init          Install or refresh the config-driven Atlas workspace
   doctor        Inspect the Atlas workspace for drift; reports fixable and
                 manual issues plus a non-blocking Advisory section
+                for context-size and security signals
   doctor --fix  Apply safe deterministic repairs reported by doctor
   doctor --handoff context-size
                 Print a safe agent prompt for context-size cleanup; exits 0
                 when the prompt (or a no-op notice) is printed
+  status        Print a read-only workspace dashboard; always exits 0
+  memory pull   Vendor the pinned memory.shared git tree into the configured
+                shared memory tier and record hashes in atlas.lock.json
+  memory propose
+                Export local scope=org memory entries for review in the
+                shared memory repository; never pushes or opens PRs
   update        Check npm for a newer Atlas release (network; never run
                 implicitly) and print the pinned upgrade command
 
 Options:
   --root <dir>       Workspace root for init (repo-relative; default .ai)
   --template <name>  Workspace template for init (default standard)
+  --minimal          Init only config, AGENTS.md, CLAUDE.md, memory, and
+                     vocabulary; disabled features can be enabled later
   --dry-run          Preview init changes without writing anything
   --yes              Skip prompts and take the non-interactive path;
                      does not bypass the dirty-worktree refusal
@@ -431,7 +551,7 @@ Options:
   --here             Allow init inside a repository subdirectory
                      (deliberate nested workspace, e.g. a monorepo package)
   --ci               Force the non-interactive path (also implied by CI=1)
-  --json             doctor only: print findings as JSON
+  --json             doctor/status only: print machine-readable JSON
   --handoff <topic>  doctor only: print an agent handoff prompt
                      (supported topic: context-size)
   --reset-skills     doctor --fix only: overwrite customized managed skills

@@ -23,9 +23,7 @@ function makeIo(overrides = {}) {
     confirm: () => {
       throw new Error("unexpected confirm prompt");
     },
-    select: () => {
-      throw new Error("unexpected select prompt");
-    },
+    select: async (options) => options.message === "Choose an Atlas profile." ? "full" : "skip",
     detectAgents: () => [],
     launchAgent: () => {
       throw new Error("unexpected agent launch");
@@ -160,6 +158,9 @@ test("an existing workspace skips the root question and short-circuits without t
     await finalizeWorkspaceMetadata(dir);
     let detectCalls = 0;
     const io = makeIo({
+      select: () => {
+        throw new Error("unexpected select prompt");
+      },
       detectAgents: () => {
         detectCalls += 1;
         return [];
@@ -274,6 +275,9 @@ test("after a successful write the launcher offers found agents with Skip as the
       confirm: async () => true,
       detectAgents: () => [fakeAgent],
       select: async (options) => {
+        if (options.message === "Choose an Atlas profile.") {
+          return "full";
+        }
         selectOptions = options;
         return "claude";
       },
@@ -303,7 +307,7 @@ test("cancelling the launcher select is a skip, not an interrupt", async () => {
       text: async () => ".ai",
       confirm: async () => true,
       detectAgents: () => [{ name: "codex", bin: "codex", buildArgs: (prompt) => [prompt] }],
-      select: async () => CANCEL
+      select: async (options) => options.message === "Choose an Atlas profile." ? "full" : CANCEL
     });
 
     const exitCode = await runInteractiveInit({ cwd: dir, color: false, io });
@@ -319,7 +323,7 @@ test("a failed agent spawn is reported gracefully and init still exits 0", async
       text: async () => ".ai",
       confirm: async () => true,
       detectAgents: () => [{ name: "claude", bin: "claude", buildArgs: (prompt) => [prompt] }],
-      select: async () => "claude",
+      select: async (options) => options.message === "Choose an Atlas profile." ? "full" : "claude",
       launchAgent: async () => ({ error: new Error("spawn claude ENOENT") })
     });
 
@@ -327,5 +331,27 @@ test("a failed agent spawn is reported gracefully and init still exits 0", async
 
     assert.equal(exitCode, 0);
     await stat(path.join(dir, ".ai/config.json"));
+  });
+});
+
+test("interactive init can choose the minimal profile", async () => {
+  await withTempRepo(async (dir) => {
+    const selects = [];
+    const io = makeIo({
+      text: async () => ".ai",
+      confirm: async () => true,
+      select: async (options) => {
+        selects.push(options.message);
+        return options.message === "Choose an Atlas profile." ? "minimal" : "skip";
+      }
+    });
+
+    const exitCode = await runInteractiveInit({ cwd: dir, color: false, io });
+    const config = JSON.parse(await readFile(path.join(dir, ".ai/config.json"), "utf8"));
+
+    assert.equal(exitCode, 0);
+    assert(selects.includes("Choose an Atlas profile."));
+    assert.equal(config.features.managedSkills, false);
+    await assert.rejects(stat(path.join(dir, ".ai/skills")), /ENOENT/);
   });
 });

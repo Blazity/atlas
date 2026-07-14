@@ -20,14 +20,14 @@ export function planTreeLines(plan, { color }) {
 // The outro's pasteable handoff prompt must stand out: prompt lines render in
 // brand orange, the surrounding guidance dims. Without color this is exactly
 // initNextStepText, byte for byte — the plain CLI path shares that text.
-export function renderNextStepText(root, { color }) {
-  const text = initNextStepText(root);
+export function renderNextStepText(root, { color, profile } = {}) {
+  const text = initNextStepText(root, { profile });
   if (!color) {
     return text;
   }
 
   const theme = makeTheme({ color });
-  const promptLines = new Set(setupHandoffPrompt(root).split("\n").map((line) => `  ${line}`));
+  const promptLines = new Set(setupHandoffPrompt(root, { profile }).split("\n").map((line) => `  ${line}`));
   return text
     .split("\n")
     .map((line) => {
@@ -49,7 +49,7 @@ export function summarizeDoctorPass(findings) {
   return { healthy: true, summary: `doctor · 0 issues · workspace healthy${advisorySuffix}`, remaining };
 }
 
-export async function runInteractiveInit({ cwd, templateName = "standard", color = true, force = false, here = false, root, io = {} }) {
+export async function runInteractiveInit({ cwd, templateName = "standard", color = true, force = false, here = false, root, profile, io = {} }) {
   // The io seam lets tests drive prompts and agent launches without a TTY.
   const ui = { isCancel, text, confirm, select, detectAgents, launchAgent, ...io };
 
@@ -75,15 +75,21 @@ export async function runInteractiveInit({ cwd, templateName = "standard", color
     }
   }
 
-  const workspaceRoot = await resolveWorkspaceRoot(ui, cwd, root);
-  if (workspaceRoot === null) {
+  const workspace = await resolveWorkspaceRoot(ui, cwd, root);
+  if (workspace === null) {
+    cancel("Cancelled. Nothing written.");
+    return 130;
+  }
+
+  const selectedProfile = await resolveProfile(ui, profile, { configExists: workspace.exists });
+  if (selectedProfile === null) {
     cancel("Cancelled. Nothing written.");
     return 130;
   }
 
   const scan = spinner();
   scan.start("scanning repository…");
-  const plan = await buildPlan(cwd, { templateName, root: workspaceRoot });
+  const plan = await buildPlan(cwd, { templateName, root: workspace.root, profile: selectedProfile });
   scan.stop("Repository scanned");
 
   if (plan.conflicts.length > 0) {
@@ -96,7 +102,7 @@ export async function runInteractiveInit({ cwd, templateName = "standard", color
 
   if (plan.actions.length === 0) {
     note("Already up to date — nothing to write.", "atlas");
-    outro(renderNextStepText(plan.root, { color }));
+    outro(renderNextStepText(plan.root, { color, profile: plan.profile }));
     return 0;
   }
 
@@ -143,9 +149,11 @@ export async function runInteractiveInit({ cwd, templateName = "standard", color
     report(`[${finding.code}] ${finding.message}`);
   }
 
-  outro(renderNextStepText(plan.root, { color }));
+  outro(renderNextStepText(plan.root, { color, profile: plan.profile }));
 
-  await offerAgentLaunch(ui, plan.root);
+  if (plan.profile !== "minimal") {
+    await offerAgentLaunch(ui, plan.root);
+  }
   return 0;
 }
 
@@ -153,11 +161,11 @@ export async function runInteractiveInit({ cwd, templateName = "standard", color
 async function resolveWorkspaceRoot(ui, cwd, requestedRoot) {
   const discovered = await loadConfig(cwd);
   if (discovered.exists) {
-    return discovered.root;
+    return { root: discovered.root, exists: true };
   }
 
   if (requestedRoot !== undefined) {
-    return normalizePath(requestedRoot.trim());
+    return { root: normalizePath(requestedRoot.trim()), exists: false };
   }
 
   const answer = await ui.text({
@@ -171,7 +179,29 @@ async function resolveWorkspaceRoot(ui, cwd, requestedRoot) {
   if (ui.isCancel(answer)) {
     return null;
   }
-  return normalizePath(answer.trim());
+  return { root: normalizePath(answer.trim()), exists: false };
+}
+
+async function resolveProfile(ui, requestedProfile, { configExists } = {}) {
+  if (configExists) {
+    return requestedProfile;
+  }
+  if (requestedProfile !== undefined) {
+    return requestedProfile;
+  }
+
+  const answer = await ui.select({
+    message: "Choose an Atlas profile.",
+    options: [
+      { value: "full", label: "Full workspace" },
+      { value: "minimal", label: "Minimal workspace" }
+    ],
+    initialValue: "full"
+  });
+  if (ui.isCancel(answer)) {
+    return null;
+  }
+  return answer;
 }
 
 async function offerAgentLaunch(ui, root) {

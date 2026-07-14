@@ -134,6 +134,28 @@ test("doctor scaffolds atlas-graph only when the graph feature is enabled", asyn
   });
 });
 
+test("minimal workspaces can enable only the graph managed skill", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init", "--minimal"], { cwd: directory });
+    const configPath = path.join(directory, ".ai/config.json");
+    const config = JSON.parse(await readFile(configPath, "utf8"));
+    config.paths.graph = "graph";
+    config.features.graph = {
+      enabled: true,
+      staleCommitThreshold: 10,
+      generator: { name: "graphify", version: "1.2.3" }
+    };
+    await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
+
+    const fix = await runCli(["doctor", "--fix", "--force"], { cwd: directory });
+
+    assert.equal(fix.exitCode, 0);
+    assert.match(await readFile(path.join(directory, ".ai/skills/atlas-graph/SKILL.md"), "utf8"), /name: atlas-graph/);
+    await assert.rejects(stat(path.join(directory, ".ai/skills/atlas-setup/SKILL.md")), /ENOENT/);
+    await assert.rejects(stat(path.join(directory, ".ai/graph")), /ENOENT/);
+  });
+});
+
 test("doctor reports graph artifacts without a parseable sidecar as advisories", async () => {
   await withTempRepo(async (directory) => {
     await writeConfig(directory, graphConfig());
@@ -211,9 +233,15 @@ test("doctor reports fresh, stale, unknown-sha, and generator-drift graph states
     await writeGraph(directory, meta(current, { generator: { name: "graphify", version: "9.9.9" } }));
     const drift = await runCli(["doctor", "--json"], { cwd: directory });
     const driftFinding = JSON.parse(drift.stdout).findings.find((finding) => finding.code === "graph-generator-drift");
+    const status = await runCli(["status", "--json"], { cwd: directory });
+    const statusPayload = JSON.parse(status.stdout);
+    const statusFinding = statusPayload.health.findings.find((finding) => finding.code === "graph-generator-drift");
     assert.equal(drift.exitCode, 0);
     assert.equal(driftFinding.severity, "advisory");
     assert.match(driftFinding.message, /expected graphify 1\.2\.3/);
+    assert.equal(status.exitCode, 0);
+    assert.equal(statusPayload.health.classification, "clean");
+    assert.equal(statusFinding.severity, "advisory");
   });
 });
 

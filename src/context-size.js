@@ -2,6 +2,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { normalizePath, resolveArtifactPath } from "./config.js";
+import { isFeatureEnabled } from "./features.js";
 import { repoPath } from "./repo.js";
 import { managedSkillFilesForConfig } from "./templates.js";
 
@@ -135,7 +136,7 @@ export function buildContextSizeHandoffPrompt(report) {
   ].join("\n");
 }
 
-async function collectContextFileCandidates(repoRoot, config, io) {
+export async function collectContextFileCandidates(repoRoot, config, io) {
   const candidates = [
     rootCandidate("AGENTS.md"),
     rootCandidate("CLAUDE.md"),
@@ -153,17 +154,19 @@ async function collectContextFileCandidates(repoRoot, config, io) {
     promptLoaded: true
   }, io));
 
-  candidates.push(...await markdownFiles(repoRoot, resolveArtifactPath(config, "decisions"), {
-    category: "decision",
-    thresholdKey: "decision",
-    promptLoaded: false
-  }, io));
+  if (isFeatureEnabled(config, "decisions")) {
+    candidates.push(...await markdownFiles(repoRoot, resolveArtifactPath(config, "decisions"), {
+      category: "decision",
+      thresholdKey: "decision",
+      promptLoaded: false
+    }, io));
 
-  candidates.push(...await markdownFiles(repoRoot, resolveArtifactPath(config, "adrs"), {
-    category: "decision",
-    thresholdKey: "decision",
-    promptLoaded: false
-  }, io));
+    candidates.push(...await markdownFiles(repoRoot, resolveArtifactPath(config, "adrs"), {
+      category: "decision",
+      thresholdKey: "decision",
+      promptLoaded: false
+    }, io));
+  }
 
   const skillsRoot = resolveArtifactPath(config, "skills");
   for (const [skillName, fileName] of managedSkillFilesForConfig(config)) {

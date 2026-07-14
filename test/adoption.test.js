@@ -57,10 +57,14 @@ test("help documents the exit-code contract and the doctor/init flags", async ()
   assert.match(result.stdout, /Exit codes/);
   assert.match(result.stdout, /0 {2}clean/);
   assert.match(result.stdout, /--dry-run/);
+  assert.match(result.stdout, /--minimal/);
   assert.match(result.stdout, /--ci/);
   assert.match(result.stdout, /--here/);
   assert.match(result.stdout, /--json/);
+  assert.match(result.stdout, /status/);
   assert.match(result.stdout, /--version/);
+  assert.match(result.stdout, /atlas memory pull/);
+  assert.match(result.stdout, /atlas memory propose/);
 });
 
 test("doctor in an uninitialized repo points at init instead of dumping a finding wall", async () => {

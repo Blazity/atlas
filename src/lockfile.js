@@ -22,16 +22,19 @@ export function managedFileRelativePath(config, skillName, fileName) {
 export async function readLockfile(repoRoot, root) {
   const content = await readTextIfExists(repoPath(repoRoot, lockfileRelativePath(root)));
   if (content === null) {
-    return { exists: false, files: {}, error: null };
+    return { exists: false, files: {}, memory: {}, error: null };
   }
   try {
     const parsed = JSON.parse(content);
     const files = parsed && typeof parsed === "object" && parsed.files && typeof parsed.files === "object" && !Array.isArray(parsed.files)
       ? parsed.files
       : {};
-    return { exists: true, files, error: null };
+    const memory = parsed && typeof parsed === "object" && parsed.memory && typeof parsed.memory === "object" && !Array.isArray(parsed.memory)
+      ? parsed.memory
+      : {};
+    return { exists: true, files, memory, error: null };
   } catch (error) {
-    return { exists: true, files: {}, error: error.message };
+    return { exists: true, files: {}, memory: {}, error: error.message };
   }
 }
 
@@ -46,9 +49,18 @@ export function baselineEntry(lockfile, relativePath) {
   return { sha256: entry.sha256, packaged: typeof entry.packaged === "string" ? entry.packaged : entry.sha256 };
 }
 
-export function lockfileContent(atlasVersion, files) {
+export function lockfileContent(atlasVersion, files, options = {}) {
   const sorted = Object.fromEntries(Object.keys(files).sort().map((key) => [key, files[key]]));
-  return `${JSON.stringify({ schemaVersion: 1, atlasVersion, files: sorted }, null, 2)}\n`;
+  const payload = { schemaVersion: 1, atlasVersion, files: sorted };
+  if (options.memory?.shared) {
+    payload.memory = {
+      shared: {
+        ...options.memory.shared,
+        files: sortSharedFiles(options.memory.shared.files ?? {})
+      }
+    };
+  }
+  return `${JSON.stringify(payload, null, 2)}\n`;
 }
 
 // Baselines for the current disk state: the packaged hash for files that match
@@ -73,4 +85,8 @@ export async function computeLockfileFiles(repoRoot, config, previous) {
     }
   }
   return files;
+}
+
+function sortSharedFiles(files) {
+  return Object.fromEntries(Object.keys(files).sort().map((key) => [key, files[key]]));
 }

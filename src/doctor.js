@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { applyAction } from "./actions.js";
 import {
+  configSchemaUrl,
   configPath,
   createConfigForTemplate,
   normalizePath,
@@ -11,6 +12,7 @@ import {
   validateConfig
 } from "./config.js";
 import { analyzeContextSizes, contextSizeFinding } from "./context-size.js";
+import { disabledFeatureNames, isAliasTargetEnabled, isArtifactEnabled, isFeatureEnabled } from "./features.js";
 import { collectGraphFindings, graphFeatureConfig } from "./graph.js";
 import {
   baselineEntry,
@@ -22,7 +24,10 @@ import {
   sha256
 } from "./lockfile.js";
 import { applyManagedBlock, inspectManagedBlock } from "./managed-blocks.js";
+import { planConfigMigrations } from "./migrations.js";
+import { collectMemoryFindings } from "./memory.js";
 import { fileExists, readTextIfExists, repoPath, writeText } from "./repo.js";
+import { scanSecurityContext } from "./security-scan.js";
 import { compareVersions, packageVersion, parseVersion } from "./version.js";
 import {
   agentManagedBlock,
@@ -32,6 +37,7 @@ import {
   defaultConfigJson,
   defaultGraphSkillMd,
   defaultLanguageMd,
+  defaultMemorySkillMd,
   defaultReviewSkillMd,
   defaultSetupSkillMd,
   defaultMemoryReadme,
@@ -66,19 +72,28 @@ export async function loadConfig(repoRoot, options = {}) {
   const root = options.root ?? (await discoverWorkspaceRoot(repoRoot)).root;
   const filePath = configPath(repoRoot, root);
   if (!(await fileExists(filePath))) {
-    return { config: createConfigForTemplate(options.templateName ?? "standard", root), exists: false, errors: [], root };
+    return {
+      config: createConfigForTemplate(options.templateName ?? "standard", root, { profile: options.profile }),
+      exists: false,
+      errors: [],
+      root,
+      fallback: true,
+      fallbackReason: "missing"
+    };
   }
 
   try {
     const config = JSON.parse(await readFile(filePath, "utf8"));
     const validation = validateConfig(config);
-    return { config, exists: true, errors: validation.errors, root };
+    return { config, exists: true, errors: validation.errors, root, fallback: false, fallbackReason: null };
   } catch (error) {
     return {
-      config: createConfigForTemplate(options.templateName ?? "standard", root),
+      config: createConfigForTemplate(options.templateName ?? "standard", root, { profile: options.profile }),
       exists: true,
       errors: [`config is not valid JSON: ${error.message}`],
-      root
+      root,
+      fallback: true,
+      fallbackReason: "invalid-json"
     };
   }
 }
@@ -103,7 +118,7 @@ export async function collectDoctorFindings(repoRoot, options = {}) {
       findings.push(manualFinding("broken-root-pointer", `${rootPointerFile} points to ${root}, but ${configRelativePath} is missing`));
       return findings;
     }
-    findings.push(fixableFinding("missing-config", `${configRelativePath} is missing`, writeConfigAction(repoRoot, options.templateName, root)));
+    findings.push(fixableFinding("missing-config", `${configRelativePath} is missing`, writeConfigAction(repoRoot, options.templateName, root, options.profile)));
   }
 
   for (const error of loaded.errors) {
@@ -116,34 +131,52 @@ export async function collectDoctorFindings(repoRoot, options = {}) {
 
   if (loaded.exists) {
     addVersionStampFindings(config, findings);
+    addConfigMigrationFindings(repoRoot, root, config, findings);
   }
 
-  const lockfile = await readLockfile(repoRoot, root);
-  if (lockfile.error) {
-    findings.push(manualFinding("invalid-lockfile", `${lockfileRelativePath(root)} is not valid JSON: ${lockfile.error}`));
-  } else if (loaded.exists && !lockfile.exists) {
-    findings.push(fixableFinding("missing-lockfile", `${lockfileRelativePath(root)} is missing — it records managed-skill baselines`, {
-      type: "write",
-      relativePath: lockfileRelativePath(root),
-      absolutePath: repoPath(repoRoot, lockfileRelativePath(root)),
-      content: lockfileContent(packageVersion, await computeLockfileFiles(repoRoot, config, lockfile))
-    }));
+  const hasManagedSkillFiles = managedSkillFilesForConfig(config).length > 0;
+  const lockfile = hasManagedSkillFiles
+    ? await readLockfile(repoRoot, root)
+    : { exists: false, files: {}, error: null };
+  if (hasManagedSkillFiles) {
+    if (lockfile.error) {
+      findings.push(manualFinding("invalid-lockfile", `${lockfileRelativePath(root)} is not valid JSON: ${lockfile.error}`));
+    } else if (loaded.exists && !lockfile.exists) {
+      findings.push(fixableFinding("missing-lockfile", `${lockfileRelativePath(root)} is missing — it records managed-skill baselines`, {
+        type: "write",
+        relativePath: lockfileRelativePath(root),
+        absolutePath: repoPath(repoRoot, lockfileRelativePath(root)),
+        content: lockfileContent(packageVersion, await computeLockfileFiles(repoRoot, config, lockfile))
+      }));
+    }
   }
 
   await addRootPointerFindings(repoRoot, root, findings);
+  addFeatureFindings(config, findings);
   await addRequiredArtifactFindings(repoRoot, config, findings);
+  await addMemoryScratchFindings(repoRoot, config, findings);
   await addGitkeepFindings(repoRoot, config, findings);
   // Legacy moves must precede the managed-skill findings: applyFixes runs in
   // array order, so a legacy file is relocated before any managed write lands
   // on the new path (a write-first order would trip the move overwrite guard).
-  await addLegacySkillMigrationFindings(repoRoot, config, findings);
-  await addMaintenanceSkillFindings(repoRoot, config, findings, { lockfile, resetSkills: Boolean(options.resetSkills) });
+  let managedSkillDriftFindings = [];
+  if (isFeatureEnabled(config, "managedSkills")) {
+    await addLegacySkillMigrationFindings(repoRoot, config, findings);
+    const beforeManagedSkillFindings = findings.length;
+    await addMaintenanceSkillFindings(repoRoot, config, findings, { lockfile, resetSkills: Boolean(options.resetSkills) });
+    managedSkillDriftFindings = findings.slice(beforeManagedSkillFindings);
+  }
+  await addGraphSkillFindings(repoRoot, config, findings, { lockfile, resetSkills: Boolean(options.resetSkills) });
   await addManagedFileFindings(repoRoot, root, config, findings);
-  await addSkillLinkFindings(repoRoot, config, findings);
+  if (isFeatureEnabled(config, "agentSymlinks")) {
+    await addSkillLinkFindings(repoRoot, config, findings);
+  }
   await addPlaceholderFindings(repoRoot, config, findings);
   await addAliasFindings(repoRoot, config, findings);
   await addSemanticHealthFindings(repoRoot, config, findings);
-  await addGraphFindings(repoRoot, config, findings);
+  findings.push(...await collectGraphFindings(repoRoot, config));
+  findings.push(...await collectMemoryFindings(repoRoot, config, lockfile));
+  await addSecurityScanFindings(repoRoot, config, findings, { ...options, managedSkillDriftFindings });
   await addContextSizeFindings(repoRoot, config, findings, options.diagnostics);
 
   return findings;
@@ -166,10 +199,14 @@ export async function finalizeWorkspaceMetadata(repoRoot) {
     return;
   }
 
-  if (loaded.config.atlasVersion !== packageVersion) {
-    const { schemaVersion, atlasVersion, ...rest } = loaded.config;
-    const next = { schemaVersion, atlasVersion: packageVersion, ...rest };
+  if (loaded.config.atlasVersion !== packageVersion || loaded.config.$schema !== configSchemaUrl) {
+    const { $schema, schemaVersion, atlasVersion, ...rest } = loaded.config;
+    const next = { $schema: configSchemaUrl, schemaVersion, atlasVersion: packageVersion, ...rest };
     await writeText(configPath(repoRoot, loaded.root), `${JSON.stringify(next, null, 2)}\n`);
+  }
+
+  if (managedSkillFilesForConfig(loaded.config).length === 0) {
+    return;
   }
 
   const previous = await readLockfile(repoRoot, loaded.root);
@@ -177,7 +214,7 @@ export async function finalizeWorkspaceMetadata(repoRoot) {
     return;
   }
   const files = await computeLockfileFiles(repoRoot, loaded.config, previous);
-  const content = lockfileContent(packageVersion, files);
+  const content = lockfileContent(packageVersion, files, { memory: previous.memory });
   const absolutePath = repoPath(repoRoot, lockfileRelativePath(loaded.root));
   if ((await readTextIfExists(absolutePath)) !== content) {
     await writeText(absolutePath, content);
@@ -210,7 +247,7 @@ export async function adoptSkills(repoRoot) {
   }
 
   const absolutePath = repoPath(repoRoot, lockfileRelativePath(loaded.root));
-  await writeText(absolutePath, lockfileContent(packageVersion, files));
+  await writeText(absolutePath, lockfileContent(packageVersion, files, { memory: (await readLockfile(repoRoot, loaded.root)).memory }));
   return adopted;
 }
 
@@ -230,6 +267,34 @@ function addVersionStampFindings(config, findings) {
     findings.push(manualFinding(
       "atlas-version-ahead",
       `workspace was written by Atlas ${stamp}, newer than the running CLI ${packageVersion} — upgrade the CLI; fixing with an older version would revert newer managed content (--force overrides)`
+    ));
+  }
+}
+
+function addConfigMigrationFindings(repoRoot, root, config, findings) {
+  const migrationPlan = planConfigMigrations(config);
+  if (JSON.stringify(migrationPlan.config) !== JSON.stringify(config)) {
+    findings.push(fixableFinding(
+      "config-migration-available",
+      "config.json has Atlas defaults that can be migrated safely",
+      {
+        type: "write",
+        relativePath: configRelativePath(root),
+        absolutePath: configPath(repoRoot, root),
+        content: `${JSON.stringify(migrationPlan.config, null, 2)}\n`
+      }
+    ));
+  }
+
+  for (const conflict of migrationPlan.conflicts) {
+    findings.push(advisoryFinding(
+      "config-migration-conflict",
+      "config.json has customized legacy defaults; review the migration manually",
+      [
+        `old default: ${conflict.oldDefault}`,
+        `new default: ${conflict.newDefault}`,
+        `current value: ${conflict.currentValue}`
+      ]
     ));
   }
 }
@@ -272,8 +337,22 @@ async function addRootPointerFindings(repoRoot, root, findings) {
   }));
 }
 
+function addFeatureFindings(config, findings) {
+  const disabled = disabledFeatureNames(config);
+  if (disabled.length === 0) {
+    return;
+  }
+
+  const noun = disabled.length === 1 ? "feature is" : "features are";
+  findings.push(advisoryFinding(
+    "feature-available",
+    `${disabled.length} Atlas ${noun} disabled (${disabled.join(", ")}) — set features.<name> to true and run atlas doctor --fix to scaffold it`
+  ));
+}
+
 async function addRequiredArtifactFindings(repoRoot, config, findings) {
-  const directoryKeys = ["memory", "plans", "research", "decisions", "adrs", "results", "skills"];
+  const directoryKeys = ["memory", "plans", "research", "decisions", "adrs", "results", "skills"]
+    .filter((key) => isArtifactEnabled(config, key));
   for (const key of directoryKeys) {
     const relativePath = resolveArtifactPath(config, key);
     const absolutePath = repoPath(repoRoot, relativePath);
@@ -316,8 +395,54 @@ async function addRequiredArtifactFindings(repoRoot, config, findings) {
   }
 }
 
+async function addMemoryScratchFindings(repoRoot, config, findings) {
+  const memoryPath = resolveArtifactPath(config, "memory");
+  const memoryKind = await getPathKind(repoPath(repoRoot, memoryPath));
+  if (memoryKind !== "missing" && memoryKind !== "directory") {
+    return;
+  }
+
+  const localPath = normalizePath(path.join(memoryPath, "local"));
+  const localAbsolutePath = repoPath(repoRoot, localPath);
+  const localKind = await getPathKind(localAbsolutePath);
+
+  if (localKind !== "missing" && localKind !== "directory") {
+    findings.push(manualFinding("directory-collision", `${localPath} exists but is not a directory`));
+  }
+
+  const gitignorePath = normalizePath(path.join(memoryPath, ".gitignore"));
+  const gitignoreAbsolutePath = repoPath(repoRoot, gitignorePath);
+  const gitignoreKind = await getPathKind(gitignoreAbsolutePath);
+  if (gitignoreKind === "missing") {
+    findings.push(fixableFinding("missing-memory-gitignore", `${gitignorePath} is missing`, {
+      type: "write",
+      relativePath: gitignorePath,
+      absolutePath: gitignoreAbsolutePath,
+      content: "local/\n"
+    }));
+    return;
+  }
+
+  if (gitignoreKind !== "file") {
+    findings.push(manualFinding("file-collision", `${gitignorePath} exists but is not a file`));
+    return;
+  }
+
+  const currentContent = await readFile(gitignoreAbsolutePath, "utf8");
+  const lines = currentContent.split("\n").map((line) => line.trim());
+  if (!lines.includes("local/")) {
+    const separator = currentContent.endsWith("\n") || currentContent === "" ? "" : "\n";
+    findings.push(fixableFinding("stale-memory-gitignore", `${gitignorePath} must ignore local/ scratch memory`, {
+      type: "write",
+      relativePath: gitignorePath,
+      absolutePath: gitignoreAbsolutePath,
+      content: `${currentContent}${separator}local/\n`
+    }));
+  }
+}
+
 async function addGitkeepFindings(repoRoot, config, findings) {
-  for (const key of gitkeepDirectoryKeys) {
+  for (const key of gitkeepDirectoryKeys.filter((artifactKey) => isArtifactEnabled(config, artifactKey))) {
     const relativePath = resolveArtifactPath(config, key);
     const absolutePath = repoPath(repoRoot, relativePath);
     const kind = await getPathKind(absolutePath);
@@ -419,6 +544,18 @@ async function addMaintenanceSkillFindings(repoRoot, config, findings, driftOpti
     staleCode: "stale-compact-skill",
     description: "compact skill"
   });
+  await addManagedSkillFileFinding(repoRoot, config, findings, {
+    ...driftOptions,
+    skillName: "atlas-memory",
+    fileName: "SKILL.md",
+    content: defaultMemorySkillMd(),
+    missingCode: "missing-memory-skill",
+    staleCode: "stale-memory-skill",
+    description: "memory skill"
+  });
+}
+
+async function addGraphSkillFindings(repoRoot, config, findings, driftOptions) {
   if (graphFeatureConfig(config).enabled) {
     await addManagedSkillFileFinding(repoRoot, config, findings, {
       ...driftOptions,
@@ -429,21 +566,16 @@ async function addMaintenanceSkillFindings(repoRoot, config, findings, driftOpti
       staleCode: "stale-graph-skill",
       description: "graph skill"
     });
-  } else {
-    await addOrphanedGraphSkillFinding(repoRoot, config, findings);
-  }
-}
-
-async function addOrphanedGraphSkillFinding(repoRoot, config, findings) {
-  const relativePath = normalizePath(path.join(resolveArtifactPath(config, "skills"), "atlas-graph"));
-  if ((await getPathKind(repoPath(repoRoot, relativePath))) !== "directory") {
     return;
   }
 
-  findings.push(advisoryFinding(
-    "graph-skill-orphaned",
-    `${relativePath} exists but features.graph is not enabled — enable features.graph or remove ${relativePath} and run doctor --fix to refresh the lockfile`
-  ));
+  const relativePath = normalizePath(path.join(resolveArtifactPath(config, "skills"), "atlas-graph"));
+  if ((await getPathKind(repoPath(repoRoot, relativePath))) === "directory") {
+    findings.push(advisoryFinding(
+      "graph-skill-orphaned",
+      `${relativePath} exists but features.graph is not enabled — enable features.graph or remove ${relativePath} and run doctor --fix to refresh the lockfile`
+    ));
+  }
 }
 
 async function addManagedSkillFileFinding(repoRoot, config, findings, options) {
@@ -501,14 +633,16 @@ async function addManagedSkillFileFinding(repoRoot, config, findings, options) {
     }
     findings.push(advisoryFinding(
       "customized-skill",
-      `${relativePath} is an adopted customization, but the packaged ${options.description} changed since adoption — review the update, then re-run atlas doctor --adopt-skills (or overwrite with atlas doctor --fix --reset-skills)`
+      `${relativePath} is an adopted customization, but the packaged ${options.description} changed since adoption — review the update, then re-run atlas doctor --adopt-skills (or overwrite with atlas doctor --fix --reset-skills)`,
+      { file: relativePath }
     ));
     return;
   }
 
   findings.push(advisoryFinding(
     "customized-skill",
-    `${relativePath} differs from both the packaged ${options.description} and its recorded baseline — keep it with atlas doctor --adopt-skills, or overwrite it with atlas doctor --fix --reset-skills`
+    `${relativePath} differs from both the packaged ${options.description} and its recorded baseline — keep it with atlas doctor --adopt-skills, or overwrite it with atlas doctor --fix --reset-skills`,
+    { file: relativePath }
   ));
 }
 
@@ -612,6 +746,9 @@ async function addPlaceholderFindings(repoRoot, config, findings) {
 async function addAliasFindings(repoRoot, config, findings) {
   const seenFiles = new Set();
   for (const alias of Object.keys(config.pathAliases)) {
+    if (!isAliasTargetEnabled(config, config.pathAliases[alias])) {
+      continue;
+    }
     const aliasRelativePath = normalizePath(alias);
     const aliasAbsolutePath = repoPath(repoRoot, aliasRelativePath);
     if (!(await fileExists(aliasAbsolutePath))) {
@@ -650,7 +787,7 @@ async function addAliasFindings(repoRoot, config, findings) {
 }
 
 async function addSemanticHealthFindings(repoRoot, config, findings) {
-  if (config.setupState === "scaffolded") {
+  if (config.setupState === "scaffolded" && isFeatureEnabled(config, "managedSkills")) {
     const setupSkillPath = normalizePath(path.join(resolveArtifactPath(config, "skills"), "atlas-setup", "SKILL.md"));
     findings.push(advisoryFinding("setup-pending", `Atlas setup has not been completed — read ${setupSkillPath} and follow it to finish setup`));
   }
@@ -664,15 +801,11 @@ async function addSemanticHealthFindings(repoRoot, config, findings) {
   const memoryPath = resolveArtifactPath(config, "memory");
   const memoryAbsolutePath = repoPath(repoRoot, memoryPath);
   if ((await getPathKind(memoryAbsolutePath)) === "directory") {
-    const entries = await readdir(memoryAbsolutePath);
+    const entries = (await readdir(memoryAbsolutePath)).filter((entry) => ![".gitignore", "local", "shared"].includes(entry));
     if (entries.length === 1 && entries[0] === "README.md") {
       findings.push(advisoryFinding("empty-memory", `${memoryPath} contains only README.md — no memory captured yet`));
     }
   }
-}
-
-async function addGraphFindings(repoRoot, config, findings) {
-  findings.push(...await collectGraphFindings(repoRoot, config));
 }
 
 async function addContextSizeFindings(repoRoot, config, findings, diagnostics) {
@@ -684,6 +817,18 @@ async function addContextSizeFindings(repoRoot, config, findings, diagnostics) {
   const finding = contextSizeFinding(report);
   if (finding) {
     findings.push(finding);
+  }
+}
+
+async function addSecurityScanFindings(repoRoot, config, findings, options) {
+  const securityScanner = options.securityScanner ?? scanSecurityContext;
+  try {
+    findings.push(...await securityScanner(repoRoot, config, options));
+  } catch (error) {
+    findings.push(advisoryFinding(
+      "security-scan-failed",
+      `security scan failed: ${error instanceof Error ? error.message : String(error)}`
+    ));
   }
 }
 
@@ -704,12 +849,12 @@ function rootEscapesRepo(root) {
   return normalized === ".." || normalized.startsWith("../");
 }
 
-function writeConfigAction(repoRoot, templateName = "standard", root = defaultRoot) {
+function writeConfigAction(repoRoot, templateName = "standard", root = defaultRoot, profile = "full") {
   return {
     type: "write",
     relativePath: normalizePath(path.join(root, "config.json")),
     absolutePath: configPath(repoRoot, root),
-    content: defaultConfigJson(templateName, root)
+    content: defaultConfigJson(templateName, root, { profile })
   };
 }
 
@@ -721,8 +866,13 @@ function manualFinding(code, message) {
   return { code, message, severity: "manual", fixable: false };
 }
 
-function advisoryFinding(code, message) {
-  return { code, message, severity: "advisory", fixable: false };
+function advisoryFinding(code, message, metadata = {}) {
+  const findingMetadata = Array.isArray(metadata) ? { details: metadata } : metadata;
+  return { code, message, ...findingMetadata, severity: "advisory", fixable: false };
+}
+
+function configRelativePath(root) {
+  return normalizePath(path.join(root, "config.json"));
 }
 
 async function getPathKind(absolutePath) {

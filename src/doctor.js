@@ -275,7 +275,7 @@ function addVersionStampFindings(config, findings) {
 
 function addConfigMigrationFindings(repoRoot, root, config, findings) {
   const migrationPlan = planConfigMigrations(config);
-  if (JSON.stringify(migrationPlan.config) !== JSON.stringify(config)) {
+  if (migrationPlan.applied.length > 0) {
     findings.push(fixableFinding(
       "config-migration-available",
       "config.json has Atlas defaults that can be migrated safely",

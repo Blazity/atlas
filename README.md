@@ -34,6 +34,7 @@ Atlas (by [Blazity](https://blazity.com)) gives the repository one place for all
 - 📦 **Builds on what you have** — config-driven path aliases adopt your existing docs folders instead of replacing them
 - 🩺 **Machine-checked** — `atlas doctor` verifies the structure in CI with frozen exit codes; `--fix` repairs drift deterministically
 - 🧠 **Memory with a lifecycle** — entries carry verified/cites/supersede metadata, `doctor` flags stale or duplicated facts, and `atlas memory pull` syncs a pinned org-wide memory source
+- 🛡️ **Security-scanned context** — `doctor` flags hidden-unicode tricks, injection phrasing, and exfiltration shapes planted in the files agents load
 - 🔒 **Nothing leaves your repo** — no telemetry, explicit network only, one dependency, plain files only
 
 ## Feature showcase
@@ -126,6 +127,10 @@ The exit codes are a frozen contract:
 Advisories (setup pending, empty memory, memory lifecycle checks, shared-memory drift, oversized context) inform and never fail a build. `doctor --json` emits the findings as structured data for scripting. Pin the version rather than `@latest`: managed skill files are byte-compared, so upgrading the package and running `doctor --fix` belong in the same change.
 
 Context-size advisories watch the files agents actually load — `AGENTS.md`, `CLAUDE.md`, vocabulary, memory, decisions, managed skills — against heuristic character budgets informed by documented agent caps (for example, Codex reads at most 32 KiB of project docs by default). They are hints to compact, not model limits. When one fires, `atlas doctor --handoff context-size` prints a safe cleanup prompt for any agent, and the `atlas-compact` managed skill runs the full loop: measure with the CLI, propose a per-file plan, apply approved edits, re-run `doctor` for before/after proof.
+
+### Security scanning
+
+`doctor` also scans committed AI context for prompt-injection shapes: hidden unicode, imperative instructions in comments or declarative memory, credential-bearing URLs, suspicious secret-file exfiltration instructions, broad skill `allowed-tools`, unreferenced executable skill files, and external write directives. These findings use `security-*` codes, are always advisories, appear in `doctor --json` with file and line evidence, and are never changed by `doctor --fix`.
 
 ## Updating
 

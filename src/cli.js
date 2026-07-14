@@ -206,8 +206,7 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
       const payload = {
         classification: classifyFindings(findings),
         exitCode,
-        findings: findings.map(({ code, message, severity, fixable, details }) =>
-          details ? { code, message, severity, fixable, details } : { code, message, severity, fixable })
+        findings: findings.map(serializeFinding)
       };
       return { exitCode, stdout: `${JSON.stringify(payload, null, 2)}\n`, stderr: "" };
     }
@@ -285,6 +284,21 @@ export async function runCli(argv = process.argv.slice(2), options = {}) {
   }
 
   return usageError(`Unknown command: ${parsed.command}`);
+}
+
+function serializeFinding(finding) {
+  const payload = {
+    code: finding.code,
+    message: finding.message,
+    severity: finding.severity,
+    fixable: finding.fixable
+  };
+  for (const key of ["file", "line", "patternClass", "remediation", "details"]) {
+    if (finding[key] !== undefined) {
+      payload[key] = finding[key];
+    }
+  }
+  return payload;
 }
 
 export async function main() {
@@ -483,6 +497,7 @@ Commands:
   init          Install or refresh the config-driven Atlas workspace
   doctor        Inspect the Atlas workspace for drift; reports fixable and
                 manual issues plus a non-blocking Advisory section
+                for context-size and security signals
   doctor --fix  Apply safe deterministic repairs reported by doctor
   doctor --handoff context-size
                 Print a safe agent prompt for context-size cleanup; exits 0

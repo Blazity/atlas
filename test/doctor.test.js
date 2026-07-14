@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { lstat, mkdtemp, mkdir, readFile, readlink, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdtemp, mkdir, readFile, readlink, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -31,6 +31,24 @@ test("doctor reports missing config and managed files as fixable", async () => {
 
     assert(findings.some((finding) => finding.code === "missing-config" && finding.fixable));
     assert(findings.some((finding) => finding.code === "missing-managed-block" && finding.fixable));
+  });
+});
+
+test("doctor converts unexpected security scanner errors to one advisory", async () => {
+  await withTempRepo(async (directory) => {
+    await cp(new URL("fixtures/security/doctor-scan-failure/", import.meta.url), directory, { recursive: true });
+
+    const findings = await collectDoctorFindings(directory, {
+      securityScanner: async () => {
+        throw new Error("scanner exploded");
+      }
+    });
+    const failures = findings.filter((finding) => finding.code === "security-scan-failed");
+
+    assert.equal(failures.length, 1);
+    assert.equal(failures[0].severity, "advisory");
+    assert.equal(failures[0].fixable, false);
+    assert.match(failures[0].message, /security scan failed: scanner exploded/);
   });
 });
 
@@ -902,7 +920,7 @@ test("doctor --fix --reset-skills restores the managed compact skill", async () 
   });
 });
 
-test("fresh init survives commit and clone with doctor exit 0", async () => {
+test("fresh init survives commit and clone without scratch-memory drift", async () => {
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });
     await commitAll(directory, "initialize atlas");
@@ -915,6 +933,7 @@ test("fresh init survives commit and clone with doctor exit 0", async () => {
       const doctor = await runCli(["doctor"], { cwd: clonePath });
 
       assert.equal(doctor.exitCode, 0);
+      assert.doesNotMatch(doctor.stdout, /missing-memory-local/);
       await stat(path.join(clonePath, ".ai/plans/.gitkeep"));
       await stat(path.join(clonePath, ".ai/research/.gitkeep"));
       await stat(path.join(clonePath, ".ai/results/.gitkeep"));

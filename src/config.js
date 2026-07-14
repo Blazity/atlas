@@ -222,6 +222,31 @@ export function validateConfig(config) {
     }
   }
 
+  if (config.memory !== undefined) {
+    if (!config.memory || typeof config.memory !== "object" || Array.isArray(config.memory)) {
+      errors.push("memory must be an object");
+    } else if (config.memory.shared !== undefined) {
+      if (!config.memory.shared || typeof config.memory.shared !== "object" || Array.isArray(config.memory.shared)) {
+        errors.push("memory.shared must be an object");
+      } else {
+        for (const key of ["source", "ref", "pin"]) {
+          const value = config.memory.shared[key];
+          if (typeof value !== "string" || value.trim() === "") {
+            errors.push(`memory.shared.${key} must be a non-empty string`);
+            continue;
+          }
+          const trimmed = value.trim();
+          if (trimmed.startsWith("-")) {
+            errors.push(`memory.shared.${key} must not start with -`);
+          }
+          if (key === "pin" && !/^[0-9a-f]{40}$/u.test(trimmed)) {
+            errors.push("memory.shared.pin must be a full 40-character lowercase hex commit SHA");
+          }
+        }
+      }
+    }
+  }
+
   return { valid: errors.length === 0, errors };
 }
 

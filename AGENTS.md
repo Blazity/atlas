@@ -23,4 +23,9 @@ Do not create new documentation roots unless `.ai/config.json` explicitly allows
 Durable documentation records needs, decisions, and reasons — never individuals or internal process.
 Write "memory was needed to persist context across runs", not "<name> wanted memory".
 Keep personal names, private schedules, internal-only references, and absolute local paths out of workspace artifacts.
+
+## Atlas Session Protocol
+
+Session start: read the configured memory index before relying on prior context.
+Session end: capture durable lessons with the atlas-memory skill before closing meaningful work.
 <!-- END ATLAS: artifact-paths -->

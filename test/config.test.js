@@ -13,6 +13,7 @@ import {
   resolveAliasDestination,
   validateConfig
 } from "../src/config.js";
+import { findingCodeSeverity } from "../src/findings.js";
 import { packageVersion } from "../src/version.js";
 import { configValidationFixtures } from "./helpers/config-fixtures.js";
 
@@ -54,6 +55,64 @@ test("validates required config fields", () => {
   assert.match(invalid.errors.join("\n"), /schemaVersion/);
   assert.match(invalid.errors.join("\n"), /artifactRoot/);
   assert.match(invalid.errors.join("\n"), /pathAliases/);
+});
+
+test("rejects shared memory values that could be parsed as git options", () => {
+  const config = {
+    ...createDefaultConfig(),
+    memory: {
+      shared: {
+        source: "file:///tmp/org-memory",
+        ref: "main",
+        pin: "a".repeat(40)
+      }
+    }
+  };
+
+  for (const key of ["source", "ref", "pin"]) {
+    const invalid = validateConfig({
+      ...config,
+      memory: {
+        shared: {
+          ...config.memory.shared,
+          [key]: "--upload-pack=/tmp/evil.sh"
+        }
+      }
+    });
+
+    assert.match(invalid.errors.join("\n"), new RegExp(`memory\\.shared\\.${key}`));
+    assert.match(invalid.errors.join("\n"), /must not start with -/);
+  }
+});
+
+test("requires shared memory pins to be full lowercase commit shas", () => {
+  const config = {
+    ...createDefaultConfig(),
+    memory: {
+      shared: {
+        source: "file:///tmp/org-memory",
+        ref: "main",
+        pin: "a".repeat(40)
+      }
+    }
+  };
+
+  assert.equal(validateConfig(config).valid, true);
+
+  for (const pin of ["FETCH_HEAD", "abc123", "A".repeat(40), "g".repeat(40), "a".repeat(39)]) {
+    const invalid = validateConfig({
+      ...config,
+      memory: {
+        shared: {
+          ...config.memory.shared,
+          pin
+        }
+      }
+    });
+
+    assert.match(invalid.errors.join("\n"), /memory\.shared\.pin/);
+    assert.match(invalid.errors.join("\n"), /40-character lowercase hex/);
+  }
 });
 
 test("scaffolds new configs with the setupState sentinel and all agent surfaces", () => {
@@ -98,6 +157,33 @@ test("validates optional doctor suppression and feature flags", () => {
   assert.match(validateConfig({ ...legacy, features: { plans: "no" } }).errors.join("\n"), /features\.plans/);
   assert.equal(doctor.suppress.length, 0);
   assert.equal(features.plans, true);
+});
+
+test("registers suppression codes from memory and security checks", () => {
+  const severities = {
+    "broken-citation": "advisory",
+    "dangling-supersede": "advisory",
+    "duplicate-memory-entry": "advisory",
+    "duplicate-memory-id": "advisory",
+    "malformed-memory-metadata": "advisory",
+    "missing-memory-gitignore": "fixable",
+    "missing-memory-skill": "fixable",
+    "security-exfiltration-shape": "advisory",
+    "security-hidden-text": "advisory",
+    "security-injection-phrase": "advisory",
+    "security-scan-failed": "advisory",
+    "security-skill-audit": "advisory",
+    "security-write-surface": "advisory",
+    "shared-memory-behind": "advisory",
+    "shared-memory-edited": "advisory",
+    "stale-memory": "advisory",
+    "stale-memory-gitignore": "fixable",
+    "stale-memory-skill": "fixable"
+  };
+
+  for (const [code, severity] of Object.entries(severities)) {
+    assert.equal(findingCodeSeverity(code), severity, code);
+  }
 });
 
 test("configPath joins the workspace root with config.json", () => {

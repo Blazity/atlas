@@ -34,7 +34,9 @@ Atlas (by [Blazity](https://blazity.com)) gives the repository one place for all
 - 📦 **Builds on what you have** — config-driven path aliases adopt your existing docs folders instead of replacing them
 - 🩺 **Machine-checked** — `atlas doctor` verifies the structure in CI with frozen exit codes; `--fix` repairs drift deterministically
 - 🪜 **Starts as small as you want** — `init --minimal` scaffolds just the core, and config migrations keep older workspaces current
-- 🔒 **Nothing leaves your repo** — no telemetry, no network calls, one dependency, plain files only
+- 🧠 **Memory with a lifecycle** — entries carry verified/cites/supersede metadata, `doctor` flags stale or duplicated facts, and `atlas memory pull` syncs a pinned org-wide memory source
+- 🛡️ **Security-scanned context** — `doctor` flags hidden-unicode tricks, injection phrasing, and exfiltration shapes planted in the files agents load
+- 🔒 **Nothing leaves your repo** — no telemetry, explicit network only, one dependency, plain files only
 
 ## Feature showcase
 
@@ -50,7 +52,7 @@ A short demo of `atlas init`, the handoff prompt, and `atlas doctor`.
 npx --yes @blazity-atlas/core@latest init
 ```
 
-One run scaffolds the workspace — config, vocabulary, memory, artifact directories, two managed skills, the AGENTS.md and CLAUDE.md entrypoints, and the agent symlinks — then prints a ready-to-paste handoff prompt. Your own coding agent takes it from there: it inspects the repository and fills the workspace with project-specific facts.
+One run scaffolds the workspace — config, vocabulary, memory, artifact directories, managed skills, the AGENTS.md and CLAUDE.md entrypoints, and the agent symlinks — then prints a ready-to-paste handoff prompt. Your own coding agent takes it from there: it inspects the repository and fills the workspace with project-specific facts.
 
 In a terminal, `init` runs interactively: it asks where the workspace should live (default `.ai`), previews every file before writing, and can launch a detected agent CLI (`claude`, `codex`, `cursor-agent`) with the handoff prompt.
 
@@ -64,7 +66,7 @@ These are behaviors you can verify in two minutes, not promises:
 - **Preserves your content.** An existing `AGENTS.md` gets one fenced managed block appended; everything you wrote stays. Repairs never touch content outside managed blocks.
 - **Idempotent.** A second `init` prints `Already up to date — nothing to write.`
 - **Previewable.** `init --dry-run` shows every planned write and touches nothing.
-- **Plain files only.** No database, no daemon; the only network call is the explicitly invoked update check (`atlas update` / `doctor --check-updates`). Uninstall = delete the workspace directory, the managed block in `AGENTS.md`, and three symlinks.
+- **Plain files only.** No database, no daemon; network is used only by explicit commands (`atlas update`, `doctor --check-updates`, `atlas memory pull`). Uninstall = delete the workspace directory, the managed block in `AGENTS.md`, and three symlinks.
 
 ## One structure, everything in it
 
@@ -83,6 +85,35 @@ If your repo already keeps docs in conventional places (`docs/adrs`, `docs/specs
 
 The published config schema lives at [`schema/config.schema.json`](schema/config.schema.json), and scaffolded configs include a `$schema` reference for editor completion. Runtime validation remains hand-rolled and dependency-free.
 
+## Memory standard
+
+Memory stays in readable markdown files. Entries can opt into lifecycle checks by placing Atlas metadata immediately after a heading:
+
+```markdown
+## Bare managed-skill names collide in shared namespaces
+<!-- atlas: id=skill-name-collisions verified=2026-06-12 cites=src/templates.js scope=repo -->
+```
+
+All metadata keys are optional: `id`, `verified`, `cites`, `scope`, `source`, and `superseded-by`. Plain markdown remains healthy; unmarked entries are not checked for age, citations, dedupe, or supersede links.
+
+`doctor` reports memory findings as advisories only: `duplicate-memory-entry`, `duplicate-memory-id`, `stale-memory`, `broken-citation`, `dangling-supersede`, `malformed-memory-metadata`, `shared-memory-behind`, and `shared-memory-edited`. The scratch tier lives in `.ai/memory/local/` and is gitignored. The `atlas-memory` managed skill handles session-end capture, depersonalization, ADD / UPDATE / DELETE / NOOP proposals, and promotion from scratch into committed memory.
+
+For organization memory, configure:
+
+```json
+{
+  "memory": {
+    "shared": {
+      "source": "git@example.com:org/memory.git",
+      "ref": "main",
+      "pin": "<commit-sha>"
+    }
+  }
+}
+```
+
+`atlas memory pull` is the explicit networked command: it vendors the pinned shared tree into `.ai/memory/shared/` and records hashes in `atlas.lock.json`. `doctor` then flags `shared-memory-behind` and `shared-memory-edited` as advisories without going online. `atlas memory propose` exports local entries marked `scope=org` into `.ai/results/memory-proposal/` for review in the shared memory repository; it never pushes or opens PRs.
+
 ## `doctor` in CI
 
 ```yaml
@@ -98,15 +129,19 @@ The exit codes are a frozen contract:
 | `1` | Fixable drift — `atlas doctor --fix` repairs it deterministically |
 | `2` | Manual conflicts that need a human |
 
-Advisories (setup pending, empty memory, oversized context) inform and never fail a build. `doctor --json` emits the findings as structured data for scripting. Pin the version rather than `@latest`: managed skill files are byte-compared, so upgrading the package and running `doctor --fix` belong in the same change.
+Advisories (setup pending, empty memory, memory lifecycle checks, shared-memory drift, oversized context) inform and never fail a build. `doctor --json` emits the findings as structured data for scripting. Pin the version rather than `@latest`: managed skill files are byte-compared, so upgrading the package and running `doctor --fix` belong in the same change.
 
 Per-repo suppression lives in `.ai/config.json` under `doctor.suppress`. Suppression can hide advisory or fixable finding codes, never manual conflicts; suppressed findings still render as one summary line and appear under `suppressed` in `doctor --json`.
 
 Context-size advisories watch the files agents actually load — `AGENTS.md`, `CLAUDE.md`, vocabulary, memory, decisions, managed skills — against heuristic character budgets informed by documented agent caps (for example, Codex reads at most 32 KiB of project docs by default). They are hints to compact, not model limits. When one fires, `atlas doctor --handoff context-size` prints a safe cleanup prompt for any agent, and the `atlas-compact` managed skill runs the full loop: measure with the CLI, propose a per-file plan, apply approved edits, re-run `doctor` for before/after proof.
 
+### Security scanning
+
+`doctor` also scans committed AI context for prompt-injection shapes: hidden unicode, imperative instructions in comments or declarative memory, credential-bearing URLs, suspicious secret-file exfiltration instructions, broad skill `allowed-tools`, unreferenced executable skill files, and external write directives. These findings use `security-*` codes, are always advisories, appear in `doctor --json` with file and line evidence, and are never changed by `doctor --fix`.
+
 ## Updating
 
-`atlas update` checks npm for a newer release — the only Atlas command that touches the network, and only when you run it — and prints the pinned upgrade command. `doctor --check-updates` runs the same check as a non-blocking advisory. `doctor` itself never goes online, so CI stays deterministic and offline.
+`atlas update` checks npm for a newer release and prints the pinned upgrade command. `doctor --check-updates` runs the same check as a non-blocking advisory. `atlas memory pull` fetches only the configured `memory.shared` git source. `doctor` itself never goes online, so CI stays deterministic and offline.
 
 The workspace records how it was written, and `doctor` uses both records:
 
@@ -118,7 +153,7 @@ Workspaces scaffolded before the lockfile existed classify old skill content as 
 
 ## Reviews that leave a verdict
 
-The second managed skill, `atlas-review`, walks AI-assisted work through five modes — Intake, Plan, Review, Gate, Postmortem — and writes its verdict (pass / conditional pass / fail, with evidence, risks, and an owner) into `.ai/results/`, where the next agent run and the next human can find it. A review that leaves no artifact doesn't count as a review.
+The `atlas-review` managed skill walks AI-assisted work through five modes — Intake, Plan, Review, Gate, Postmortem — and writes its verdict (pass / conditional pass / fail, with evidence, risks, and an owner) into `.ai/results/`, where the next agent run and the next human can find it. A review that leaves no artifact doesn't count as a review.
 
 Claude Code users run `/atlas-review`. Any other agent gets the same behavior from one instruction: *"read `.ai/skills/atlas-review/SKILL.md`"*.
 
@@ -154,7 +189,7 @@ It does **not** run your tests, evals, or policy checks (execution gates are whe
 
 ## Privacy
 
-The CLI runs locally, makes no network calls at runtime, sends no telemetry, and has exactly one dependency ([@clack/prompts](https://www.npmjs.com/package/@clack/prompts) for the interactive terminal UI). Everything it writes is a plain file in your repository. The scaffolded documentation rules also require durable artifacts to stay depersonalized — memory that is safe to commit and safe to publish.
+The CLI runs locally, sends no telemetry, and has exactly one dependency ([@clack/prompts](https://www.npmjs.com/package/@clack/prompts) for the interactive terminal UI). Network access is limited to explicit update checks and `atlas memory pull`. Everything it writes is a plain file in your repository. The scaffolded documentation rules also require durable artifacts to stay depersonalized — memory that is safe to commit and safe to publish.
 
 ## Requirements
 

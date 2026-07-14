@@ -24,7 +24,9 @@ import {
 } from "./lockfile.js";
 import { applyManagedBlock, inspectManagedBlock } from "./managed-blocks.js";
 import { planConfigMigrations } from "./migrations.js";
+import { collectMemoryFindings } from "./memory.js";
 import { fileExists, readTextIfExists, repoPath, writeText } from "./repo.js";
+import { scanSecurityContext } from "./security-scan.js";
 import { compareVersions, packageVersion, parseVersion } from "./version.js";
 import {
   agentManagedBlock,
@@ -33,6 +35,7 @@ import {
   defaultClaudeMd,
   defaultConfigJson,
   defaultLanguageMd,
+  defaultMemorySkillMd,
   defaultReviewSkillMd,
   defaultSetupSkillMd,
   defaultMemoryReadme,
@@ -144,13 +147,17 @@ export async function collectDoctorFindings(repoRoot, options = {}) {
   await addRootPointerFindings(repoRoot, root, findings);
   addFeatureFindings(config, findings);
   await addRequiredArtifactFindings(repoRoot, config, findings);
+  await addMemoryScratchFindings(repoRoot, config, findings);
   await addGitkeepFindings(repoRoot, config, findings);
   // Legacy moves must precede the managed-skill findings: applyFixes runs in
   // array order, so a legacy file is relocated before any managed write lands
   // on the new path (a write-first order would trip the move overwrite guard).
+  let managedSkillDriftFindings = [];
   if (isFeatureEnabled(config, "managedSkills")) {
     await addLegacySkillMigrationFindings(repoRoot, config, findings);
+    const beforeManagedSkillFindings = findings.length;
     await addMaintenanceSkillFindings(repoRoot, config, findings, { lockfile, resetSkills: Boolean(options.resetSkills) });
+    managedSkillDriftFindings = findings.slice(beforeManagedSkillFindings);
   }
   await addManagedFileFindings(repoRoot, root, findings);
   if (isFeatureEnabled(config, "agentSymlinks")) {
@@ -159,6 +166,8 @@ export async function collectDoctorFindings(repoRoot, options = {}) {
   await addPlaceholderFindings(repoRoot, config, findings);
   await addAliasFindings(repoRoot, config, findings);
   await addSemanticHealthFindings(repoRoot, config, findings);
+  findings.push(...await collectMemoryFindings(repoRoot, config, lockfile));
+  await addSecurityScanFindings(repoRoot, config, findings, { ...options, managedSkillDriftFindings });
   await addContextSizeFindings(repoRoot, config, findings, options.diagnostics);
 
   return findings;
@@ -196,7 +205,7 @@ export async function finalizeWorkspaceMetadata(repoRoot) {
     return;
   }
   const files = await computeLockfileFiles(repoRoot, loaded.config, previous);
-  const content = lockfileContent(packageVersion, files);
+  const content = lockfileContent(packageVersion, files, { memory: previous.memory });
   const absolutePath = repoPath(repoRoot, lockfileRelativePath(loaded.root));
   if ((await readTextIfExists(absolutePath)) !== content) {
     await writeText(absolutePath, content);
@@ -229,7 +238,7 @@ export async function adoptSkills(repoRoot) {
   }
 
   const absolutePath = repoPath(repoRoot, lockfileRelativePath(loaded.root));
-  await writeText(absolutePath, lockfileContent(packageVersion, files));
+  await writeText(absolutePath, lockfileContent(packageVersion, files, { memory: (await readLockfile(repoRoot, loaded.root)).memory }));
   return adopted;
 }
 
@@ -377,6 +386,52 @@ async function addRequiredArtifactFindings(repoRoot, config, findings) {
   }
 }
 
+async function addMemoryScratchFindings(repoRoot, config, findings) {
+  const memoryPath = resolveArtifactPath(config, "memory");
+  const memoryKind = await getPathKind(repoPath(repoRoot, memoryPath));
+  if (memoryKind !== "missing" && memoryKind !== "directory") {
+    return;
+  }
+
+  const localPath = normalizePath(path.join(memoryPath, "local"));
+  const localAbsolutePath = repoPath(repoRoot, localPath);
+  const localKind = await getPathKind(localAbsolutePath);
+
+  if (localKind !== "missing" && localKind !== "directory") {
+    findings.push(manualFinding("directory-collision", `${localPath} exists but is not a directory`));
+  }
+
+  const gitignorePath = normalizePath(path.join(memoryPath, ".gitignore"));
+  const gitignoreAbsolutePath = repoPath(repoRoot, gitignorePath);
+  const gitignoreKind = await getPathKind(gitignoreAbsolutePath);
+  if (gitignoreKind === "missing") {
+    findings.push(fixableFinding("missing-memory-gitignore", `${gitignorePath} is missing`, {
+      type: "write",
+      relativePath: gitignorePath,
+      absolutePath: gitignoreAbsolutePath,
+      content: "local/\n"
+    }));
+    return;
+  }
+
+  if (gitignoreKind !== "file") {
+    findings.push(manualFinding("file-collision", `${gitignorePath} exists but is not a file`));
+    return;
+  }
+
+  const currentContent = await readFile(gitignoreAbsolutePath, "utf8");
+  const lines = currentContent.split("\n").map((line) => line.trim());
+  if (!lines.includes("local/")) {
+    const separator = currentContent.endsWith("\n") || currentContent === "" ? "" : "\n";
+    findings.push(fixableFinding("stale-memory-gitignore", `${gitignorePath} must ignore local/ scratch memory`, {
+      type: "write",
+      relativePath: gitignorePath,
+      absolutePath: gitignoreAbsolutePath,
+      content: `${currentContent}${separator}local/\n`
+    }));
+  }
+}
+
 async function addGitkeepFindings(repoRoot, config, findings) {
   for (const key of gitkeepDirectoryKeys.filter((artifactKey) => isArtifactEnabled(config, artifactKey))) {
     const relativePath = resolveArtifactPath(config, key);
@@ -480,6 +535,15 @@ async function addMaintenanceSkillFindings(repoRoot, config, findings, driftOpti
     staleCode: "stale-compact-skill",
     description: "compact skill"
   });
+  await addManagedSkillFileFinding(repoRoot, config, findings, {
+    ...driftOptions,
+    skillName: "atlas-memory",
+    fileName: "SKILL.md",
+    content: defaultMemorySkillMd(),
+    missingCode: "missing-memory-skill",
+    staleCode: "stale-memory-skill",
+    description: "memory skill"
+  });
 }
 
 async function addManagedSkillFileFinding(repoRoot, config, findings, options) {
@@ -537,14 +601,16 @@ async function addManagedSkillFileFinding(repoRoot, config, findings, options) {
     }
     findings.push(advisoryFinding(
       "customized-skill",
-      `${relativePath} is an adopted customization, but the packaged ${options.description} changed since adoption — review the update, then re-run atlas doctor --adopt-skills (or overwrite with atlas doctor --fix --reset-skills)`
+      `${relativePath} is an adopted customization, but the packaged ${options.description} changed since adoption — review the update, then re-run atlas doctor --adopt-skills (or overwrite with atlas doctor --fix --reset-skills)`,
+      { file: relativePath }
     ));
     return;
   }
 
   findings.push(advisoryFinding(
     "customized-skill",
-    `${relativePath} differs from both the packaged ${options.description} and its recorded baseline — keep it with atlas doctor --adopt-skills, or overwrite it with atlas doctor --fix --reset-skills`
+    `${relativePath} differs from both the packaged ${options.description} and its recorded baseline — keep it with atlas doctor --adopt-skills, or overwrite it with atlas doctor --fix --reset-skills`,
+    { file: relativePath }
   ));
 }
 
@@ -703,7 +769,7 @@ async function addSemanticHealthFindings(repoRoot, config, findings) {
   const memoryPath = resolveArtifactPath(config, "memory");
   const memoryAbsolutePath = repoPath(repoRoot, memoryPath);
   if ((await getPathKind(memoryAbsolutePath)) === "directory") {
-    const entries = await readdir(memoryAbsolutePath);
+    const entries = (await readdir(memoryAbsolutePath)).filter((entry) => ![".gitignore", "local", "shared"].includes(entry));
     if (entries.length === 1 && entries[0] === "README.md") {
       findings.push(advisoryFinding("empty-memory", `${memoryPath} contains only README.md — no memory captured yet`));
     }
@@ -719,6 +785,18 @@ async function addContextSizeFindings(repoRoot, config, findings, diagnostics) {
   const finding = contextSizeFinding(report);
   if (finding) {
     findings.push(finding);
+  }
+}
+
+async function addSecurityScanFindings(repoRoot, config, findings, options) {
+  const securityScanner = options.securityScanner ?? scanSecurityContext;
+  try {
+    findings.push(...await securityScanner(repoRoot, config, options));
+  } catch (error) {
+    findings.push(advisoryFinding(
+      "security-scan-failed",
+      `security scan failed: ${error instanceof Error ? error.message : String(error)}`
+    ));
   }
 }
 
@@ -756,8 +834,9 @@ function manualFinding(code, message) {
   return { code, message, severity: "manual", fixable: false };
 }
 
-function advisoryFinding(code, message, details) {
-  return details ? { code, message, severity: "advisory", fixable: false, details } : { code, message, severity: "advisory", fixable: false };
+function advisoryFinding(code, message, metadata = {}) {
+  const findingMetadata = Array.isArray(metadata) ? { details: metadata } : metadata;
+  return { code, message, ...findingMetadata, severity: "advisory", fixable: false };
 }
 
 function configRelativePath(root) {

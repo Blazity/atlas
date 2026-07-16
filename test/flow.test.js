@@ -42,6 +42,16 @@ async function withTempRepo(fn) {
   }
 }
 
+// A bare temp directory with no git repo, for exercising the greenfield branch.
+async function withTempDir(fn) {
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-flow-nogit-"));
+  try {
+    await fn(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 test("planTreeLines renders one '<verb>  <target>' line per action", async () => {
   await withTempRepo(async (dir) => {
     const plan = await buildPlan(dir, { templateName: "standard" });
@@ -183,6 +193,70 @@ test("an existing workspace root wins over --root in the interactive flow", asyn
 
     assert.equal(exitCode, 0);
     await assert.rejects(stat(path.join(dir, ".elsewhere")), /ENOENT/);
+  });
+});
+
+test("declining the git-init prompt in a non-repo exits 2 and creates no repo", async () => {
+  await withTempDir(async (dir) => {
+    const confirms = [];
+    const io = makeIo({
+      confirm: async ({ message }) => {
+        confirms.push(message);
+        return false;
+      }
+    });
+
+    const exitCode = await runInteractiveInit({ cwd: dir, color: false, io });
+
+    assert.equal(exitCode, 2);
+    assert.deepEqual(confirms, ["Initialize a git repository here?"]);
+    await assert.rejects(stat(path.join(dir, ".git")), /ENOENT/);
+    await assert.rejects(stat(path.join(dir, ".ai")), /ENOENT/);
+  });
+});
+
+test("cancelling the git-init prompt in a non-repo exits 130 and creates no repo", async () => {
+  await withTempDir(async (dir) => {
+    const io = makeIo({
+      confirm: async () => CANCEL
+    });
+
+    const exitCode = await runInteractiveInit({ cwd: dir, color: false, io });
+
+    assert.equal(exitCode, 130);
+    await assert.rejects(stat(path.join(dir, ".git")), /ENOENT/);
+  });
+});
+
+test("a failing git init exits 2 and creates no workspace", async () => {
+  await withTempDir(async (dir) => {
+    const io = makeIo({
+      text: async () => ".ai",
+      confirm: async () => true,
+      gitInit: async () => {
+        throw new Error("git: command not found");
+      }
+    });
+
+    const exitCode = await runInteractiveInit({ cwd: dir, color: false, io });
+
+    assert.equal(exitCode, 2);
+    await assert.rejects(stat(path.join(dir, ".ai")), /ENOENT/);
+  });
+});
+
+test("accepting the git-init prompt initializes the repo and scaffolds the workspace", async () => {
+  await withTempDir(async (dir) => {
+    const io = makeIo({
+      text: async () => ".ai",
+      confirm: async () => true
+    });
+
+    const exitCode = await runInteractiveInit({ cwd: dir, color: false, io });
+
+    assert.equal(exitCode, 0);
+    await stat(path.join(dir, ".git"));
+    await stat(path.join(dir, ".ai", "config.json"));
   });
 });
 

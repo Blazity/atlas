@@ -19,6 +19,10 @@ export async function gitStatus(cwd) {
   return stdout.trim();
 }
 
+export async function gitInit(cwd) {
+  await execFileAsync("git", ["init"], { cwd });
+}
+
 // Both sides go through realpath because macOS temp paths alias /var to /private/var.
 export async function isRepoSubdirectory(cwd) {
   try {

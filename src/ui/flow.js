@@ -1,7 +1,7 @@
 import { cancel, confirm, intro, isCancel, log, note, outro, select, spinner, text } from "@clack/prompts";
 
 import { applyFixes, collectDoctorFindings, finalizeWorkspaceMetadata, findingSeverity, loadConfig } from "../doctor.js";
-import { gitStatus, isRepoSubdirectory } from "../repo.js";
+import { gitInit, gitStatus, isGitRepo, isRepoSubdirectory } from "../repo.js";
 import { buildPlan } from "../plan.js";
 import { normalizePath, workspaceRootError } from "../config.js";
 import { initNextStepText, setupHandoffPrompt } from "../templates.js";
@@ -51,13 +51,33 @@ export function summarizeDoctorPass(findings) {
 
 export async function runInteractiveInit({ cwd, templateName = "standard", color = true, force = false, here = false, root, profile, io = {} }) {
   // The io seam lets tests drive prompts and agent launches without a TTY.
-  const ui = { isCancel, text, confirm, select, detectAgents, launchAgent, ...io };
+  const ui = { isCancel, text, confirm, select, detectAgents, launchAgent, gitInit, ...io };
 
   await animateLogo(process.stdout, { color });
   const theme = makeTheme({ color });
   process.stdout.write(`${theme.dim("the agentic repo standard")}\n\n`);
 
   intro("atlas init");
+
+  if (!(await isGitRepo(cwd))) {
+    note("Atlas needs a git repository to scaffold into.", "no git repository");
+    const initRepo = await ui.confirm({ message: "Initialize a git repository here?", initialValue: false });
+    if (ui.isCancel(initRepo)) {
+      cancel("Cancelled. Nothing written.");
+      return 130;
+    }
+    if (!initRepo) {
+      cancel("Nothing written. Run git init first, then atlas init.");
+      return 2;
+    }
+    try {
+      await ui.gitInit(cwd);
+    } catch (error) {
+      cancel(`Could not initialize a git repository: ${error?.message ?? error}. Nothing written.`);
+      return 2;
+    }
+    log.success("Initialized empty git repository.");
+  }
 
   if (!here) {
     const location = await isRepoSubdirectory(cwd);

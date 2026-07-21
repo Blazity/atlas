@@ -302,7 +302,7 @@ async function walkFiles(repoRoot, absoluteRoot, io) {
 
 function shouldIgnoreArtifactFile(filePath, definition) {
   const basename = path.basename(filePath);
-  return basename === ".gitkeep" || (definition.ignoreReadme && basename === "README.md");
+  return basename === ".gitkeep" || basename === ".gitignore" || (definition.ignoreReadme && basename === "README.md");
 }
 
 function dateForFile(file, artifactGitDates) {

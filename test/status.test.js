@@ -159,6 +159,19 @@ test("status artifact date collection keeps git calls bounded", async () => {
   });
 });
 
+test("status excludes bookkeeping files from artifact counts", async () => {
+  await withTempRepo(async (directory) => {
+    await runCli(["init"], { cwd: directory });
+    await writeFile(path.join(directory, ".ai/memory/.gitignore"), "local/\n");
+
+    const result = await runStatus({ cwd: directory, json: true });
+    const payload = JSON.parse(result.stdout);
+
+    assert.equal(payload.artifacts.memory.fileCount, 0);
+    assert.equal(payload.memoryFreshness.fileCount, 0);
+  });
+});
+
 test("status uses mtime dates for untracked artifact files", async () => {
   await withTempRepo(async (directory) => {
     await runCli(["init"], { cwd: directory });

@@ -23,17 +23,20 @@ export async function describeFinding(finding) {
   return { verb: existed ? "Updated" : "Created", target: action.relativePath };
 }
 
-export async function buildPlan(cwd, { templateName, root } = {}) {
+export async function buildPlan(cwd, { templateName, root, profile } = {}) {
   const requested = templateName ?? "standard";
   // Read config once for the effective template; collectDoctorFindings re-reads it internally.
-  const loaded = await loadConfig(cwd, { templateName: requested, root });
+  const loaded = await loadConfig(cwd, { templateName: requested, root, profile });
   const effectiveTemplate = loaded.exists ? (loaded.config.template ?? "custom") : requested;
+  const effectiveProfile = loaded.exists
+    ? (loaded.config.features?.managedSkills === false ? "minimal" : "full")
+    : (profile ?? "full");
 
-  const findings = await collectDoctorFindings(cwd, { templateName: requested, root });
+  const findings = await collectDoctorFindings(cwd, { templateName: requested, root, profile });
   const conflicts = findings.filter((finding) => findingSeverity(finding) === "manual");
   const fixable = findings.filter((finding) => findingSeverity(finding) === "fixable");
   const advisories = findings.filter((finding) => findingSeverity(finding) === "advisory");
   const actions = await Promise.all(fixable.map(describeFinding));
 
-  return { templateName: effectiveTemplate, root: loaded.root, fixable, conflicts, advisories, actions };
+  return { templateName: effectiveTemplate, profile: effectiveProfile, root: loaded.root, fixable, conflicts, advisories, actions };
 }

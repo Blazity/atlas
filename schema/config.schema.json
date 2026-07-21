@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unpkg.com/@blazity-atlas/core@0.5.0/schema/config.schema.json",
+  "title": "Atlas config",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "artifactRoot",
+    "paths",
+    "pathAliases"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "atlasVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "template": {
+      "type": "string",
+      "enum": [
+        "standard",
+        "library",
+        "app",
+        "monorepo",
+        "agency"
+      ]
+    },
+    "setupState": {
+      "type": "string",
+      "enum": [
+        "scaffolded",
+        "configured"
+      ]
+    },
+    "artifactRoot": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "agentSurfaces": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "claude",
+          "agents",
+          "cursor"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "features": {
+      "type": "object",
+      "properties": {
+        "plans": {
+          "type": "boolean"
+        },
+        "research": {
+          "type": "boolean"
+        },
+        "decisions": {
+          "type": "boolean"
+        },
+        "results": {
+          "type": "boolean"
+        },
+        "managedSkills": {
+          "type": "boolean"
+        },
+        "agentSymlinks": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "doctor": {
+      "type": "object",
+      "properties": {
+        "suppress": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "paths": {
+      "type": "object",
+      "required": [
+        "language",
+        "memory",
+        "plans",
+        "research",
+        "decisions",
+        "adrs",
+        "results",
+        "skills"
+      ],
+      "properties": {
+        "language": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+        },
+        "memory": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+        },
+        "plans": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+        },
+        "research": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+        },
+        "decisions": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+        },
+        "adrs": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+        },
+        "results": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+        },
+        "skills": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+        }
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+      }
+    },
+    "pathAliases": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+      }
+    }
+  },
+  "additionalProperties": true
+}

@@ -135,7 +135,7 @@ export function buildContextSizeHandoffPrompt(report) {
   ].join("\n");
 }
 
-async function collectContextFileCandidates(repoRoot, config, io) {
+export async function collectContextFileCandidates(repoRoot, config, io) {
   const candidates = [
     rootCandidate("AGENTS.md"),
     rootCandidate("CLAUDE.md"),

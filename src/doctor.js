@@ -23,6 +23,7 @@ import {
 import { applyManagedBlock, inspectManagedBlock } from "./managed-blocks.js";
 import { collectMemoryFindings } from "./memory.js";
 import { fileExists, readTextIfExists, repoPath, writeText } from "./repo.js";
+import { scanSecurityContext } from "./security-scan.js";
 import { compareVersions, packageVersion, parseVersion } from "./version.js";
 import {
   agentManagedBlock,
@@ -138,13 +139,16 @@ export async function collectDoctorFindings(repoRoot, options = {}) {
   // array order, so a legacy file is relocated before any managed write lands
   // on the new path (a write-first order would trip the move overwrite guard).
   await addLegacySkillMigrationFindings(repoRoot, config, findings);
+  const beforeManagedSkillFindings = findings.length;
   await addMaintenanceSkillFindings(repoRoot, config, findings, { lockfile, resetSkills: Boolean(options.resetSkills) });
+  const managedSkillDriftFindings = findings.slice(beforeManagedSkillFindings);
   await addManagedFileFindings(repoRoot, root, findings);
   await addSkillLinkFindings(repoRoot, config, findings);
   await addPlaceholderFindings(repoRoot, config, findings);
   await addAliasFindings(repoRoot, config, findings);
   await addSemanticHealthFindings(repoRoot, config, findings);
   findings.push(...await collectMemoryFindings(repoRoot, config, lockfile));
+  await addSecurityScanFindings(repoRoot, config, findings, { ...options, managedSkillDriftFindings });
   await addContextSizeFindings(repoRoot, config, findings, options.diagnostics);
 
   return findings;
@@ -532,14 +536,16 @@ async function addManagedSkillFileFinding(repoRoot, config, findings, options) {
     }
     findings.push(advisoryFinding(
       "customized-skill",
-      `${relativePath} is an adopted customization, but the packaged ${options.description} changed since adoption — review the update, then re-run atlas doctor --adopt-skills (or overwrite with atlas doctor --fix --reset-skills)`
+      `${relativePath} is an adopted customization, but the packaged ${options.description} changed since adoption — review the update, then re-run atlas doctor --adopt-skills (or overwrite with atlas doctor --fix --reset-skills)`,
+      { file: relativePath }
     ));
     return;
   }
 
   findings.push(advisoryFinding(
     "customized-skill",
-    `${relativePath} differs from both the packaged ${options.description} and its recorded baseline — keep it with atlas doctor --adopt-skills, or overwrite it with atlas doctor --fix --reset-skills`
+    `${relativePath} differs from both the packaged ${options.description} and its recorded baseline — keep it with atlas doctor --adopt-skills, or overwrite it with atlas doctor --fix --reset-skills`,
+    { file: relativePath }
   ));
 }
 
@@ -714,6 +720,18 @@ async function addContextSizeFindings(repoRoot, config, findings, diagnostics) {
   }
 }
 
+async function addSecurityScanFindings(repoRoot, config, findings, options) {
+  const securityScanner = options.securityScanner ?? scanSecurityContext;
+  try {
+    findings.push(...await securityScanner(repoRoot, config, options));
+  } catch (error) {
+    findings.push(advisoryFinding(
+      "security-scan-failed",
+      `security scan failed: ${error instanceof Error ? error.message : String(error)}`
+    ));
+  }
+}
+
 function countVocabularyDataRows(content) {
   const lines = content.split("\n").map((line) => line.trim());
   const separatorIndex = lines.findIndex((line) => /^\|(\s*:?-{3,}:?\s*\|)+$/.test(line));
@@ -748,8 +766,8 @@ function manualFinding(code, message) {
   return { code, message, severity: "manual", fixable: false };
 }
 
-function advisoryFinding(code, message) {
-  return { code, message, severity: "advisory", fixable: false };
+function advisoryFinding(code, message, metadata = {}) {
+  return { code, message, ...metadata, severity: "advisory", fixable: false };
 }
 
 async function getPathKind(absolutePath) {

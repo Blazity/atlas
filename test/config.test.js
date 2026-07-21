@@ -28,6 +28,8 @@ test("creates the default config with root-relative paths and aliases", () => {
   assert.equal(config.features.managedSkills, true);
   assert.deepEqual(config.doctor.suppress, []);
   assert.equal(config.paths.plans, "plans");
+  assert.equal(config.paths.graph, undefined);
+  assert.equal(config.features.graph, undefined);
   assert.equal(config.paths.adrs, "decisions/adrs");
   assert.equal(config.pathAliases["docs/plans"], "plans");
   assert.equal(config.pathAliases["docs/superpowers/plans"], undefined);
@@ -159,13 +161,56 @@ test("validates optional doctor suppression and feature flags", () => {
   assert.equal(features.plans, true);
 });
 
+test("runtime and schema accept the graph object beside boolean features", () => {
+  const base = createDefaultConfig();
+  const valid = {
+    ...base,
+    paths: { ...base.paths, graph: "graph" },
+    features: {
+      ...base.features,
+      plans: false,
+      graph: {
+        enabled: true,
+        staleCommitThreshold: 10,
+        generator: { name: "graphify", version: "1.2.3" }
+      }
+    }
+  };
+  const invalid = {
+    ...valid,
+    paths: { ...valid.paths, graph: "graph/../../outside" },
+    features: {
+      ...valid.features,
+      graph: {
+        ...valid.features.graph,
+        staleCommitThreshold: -1,
+        generator: { name: "   ", version: "1.2.3" }
+      }
+    }
+  };
+
+  assert.deepEqual(validateConfig(valid).errors, []);
+  assert.deepEqual(validateWithSchema(valid, configJsonSchema()), []);
+  assert.match(validateConfig(invalid).errors.join("\n"), /paths\.graph/);
+  assert.match(validateConfig(invalid).errors.join("\n"), /features\.graph\.staleCommitThreshold/);
+  assert.match(validateConfig(invalid).errors.join("\n"), /features\.graph\.generator\.name/);
+  assert.match(validateWithSchema(invalid, configJsonSchema()).join("\n"), /generator\.name/);
+});
+
 test("registers suppression codes from memory and security checks", () => {
   const severities = {
     "broken-citation": "advisory",
     "dangling-supersede": "advisory",
     "duplicate-memory-entry": "advisory",
     "duplicate-memory-id": "advisory",
+    "graph-generator-drift": "advisory",
+    "graph-inspection-failed": "advisory",
+    "graph-meta-invalid": "advisory",
+    "graph-meta-missing": "advisory",
+    "graph-skill-orphaned": "advisory",
+    "graph-stale": "advisory",
     "malformed-memory-metadata": "advisory",
+    "missing-graph-skill": "fixable",
     "missing-memory-gitignore": "fixable",
     "missing-memory-skill": "fixable",
     "security-exfiltration-shape": "advisory",
@@ -177,6 +222,7 @@ test("registers suppression codes from memory and security checks", () => {
     "shared-memory-behind": "advisory",
     "shared-memory-edited": "advisory",
     "stale-memory": "advisory",
+    "stale-graph-skill": "fixable",
     "stale-memory-gitignore": "fixable",
     "stale-memory-skill": "fixable"
   };
@@ -279,6 +325,18 @@ function validateSchemaNode(value, schema, path, errors) {
     errors.push(`${path} must be one of ${schema.enum.join(", ")}`);
     return;
   }
+  for (const child of schema.allOf ?? []) {
+    validateSchemaNode(value, child, path, errors);
+  }
+  if (schema.if) {
+    const conditionErrors = [];
+    validateSchemaNode(value, schema.if, path, conditionErrors);
+    if (conditionErrors.length === 0 && schema.then) {
+      validateSchemaNode(value, schema.then, path, errors);
+    } else if (conditionErrors.length > 0 && schema.else) {
+      validateSchemaNode(value, schema.else, path, errors);
+    }
+  }
   if (schema.type && !matchesType(value, schema.type)) {
     errors.push(`${path} must be ${schema.type}`);
     return;
@@ -289,6 +347,11 @@ function validateSchemaNode(value, schema, path, errors) {
     }
     if (schema.pattern && !new RegExp(schema.pattern, "u").test(value)) {
       errors.push(`${path} must match ${schema.pattern}`);
+    }
+  }
+  if ((schema.type === "number" || schema.type === "integer") && typeof value === "number") {
+    if (schema.minimum !== undefined && value < schema.minimum) {
+      errors.push(`${path} must be at least ${schema.minimum}`);
     }
   }
   if (schema.type === "array" && Array.isArray(value)) {
@@ -337,6 +400,9 @@ function validateSchemaNode(value, schema, path, errors) {
 function matchesType(value, type) {
   if (type === "array") {
     return Array.isArray(value);
+  }
+  if (type === "integer") {
+    return Number.isInteger(value);
   }
   if (type === "object") {
     return value !== null && typeof value === "object" && !Array.isArray(value);

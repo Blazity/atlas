@@ -4,7 +4,7 @@ import path from "node:path";
 import { normalizePath, resolveArtifactPath } from "./config.js";
 import { isFeatureEnabled } from "./features.js";
 import { repoPath } from "./repo.js";
-import { managedSkillFiles } from "./templates.js";
+import { managedSkillFilesForConfig } from "./templates.js";
 
 export const contextSizeThresholds = {
   rootInstruction: { warn: 8000, warnLines: 200, overflow: 32768 },
@@ -168,16 +168,14 @@ export async function collectContextFileCandidates(repoRoot, config, io) {
     }, io));
   }
 
-  if (isFeatureEnabled(config, "managedSkills")) {
-    const skillsRoot = resolveArtifactPath(config, "skills");
-    for (const [skillName, fileName] of managedSkillFiles) {
-      candidates.push({
-        relativePath: normalizePath(path.join(skillsRoot, skillName, fileName)),
-        category: "managed-skill",
-        thresholdKey: "managedSkill",
-        promptLoaded: false
-      });
-    }
+  const skillsRoot = resolveArtifactPath(config, "skills");
+  for (const [skillName, fileName] of managedSkillFilesForConfig(config)) {
+    candidates.push({
+      relativePath: normalizePath(path.join(skillsRoot, skillName, fileName)),
+      category: "managed-skill",
+      thresholdKey: "managedSkill",
+      promptLoaded: false
+    });
   }
 
   return dedupeCandidates(candidates);

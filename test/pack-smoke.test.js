@@ -77,6 +77,7 @@ test("package includes standalone managed skills but excludes Claude plugin meta
     assert(files.includes("skills/atlas-setup/SKILL.md"));
     assert(files.includes("skills/atlas-setup/customization.md"));
     assert(files.includes("skills/atlas-review/SKILL.md"));
+    assert(files.includes("skills/atlas-graph/SKILL.md"));
     assert(files.includes("schema/config.schema.json"));
     assert(files.includes("schema/atlas-lock.schema.json"));
     assert(files.includes("skills/atlas-memory/SKILL.md"));
